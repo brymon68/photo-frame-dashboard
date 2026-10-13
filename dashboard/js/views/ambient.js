@@ -1,8 +1,8 @@
-// Ambient (idle photo frame) and Night (dim red clock) overlays.
+// Ambient (idle clock and weather) and Night (dim red clock) overlays.
 (function () {
   'use strict';
   var D = window.DATA, $ = App.$;
-  var amb = { show: null }, shiftTimer = null;
+  var shiftTimer = null;
 
   function ambientInfo() {
     var n = App.now(), w = App.weatherNow(), next = App.nextEvent();
@@ -10,8 +10,9 @@
       '<div class="amb-date">' + App.fmt.day(n) + ', ' + App.fmt.month(n) + ' ' + n.getDate() + '</div></div>' +
       '<div class="amb-right">' +
       '<div class="amb-wx">' + App.icon(w.cond, 44) + '<span class="num">' + w.temp + '°</span><small>' + w.summary + '</small></div>' +
+      '<div class="amb-wx-status">Albuquerque · ' + App.esc(App.weather.label()) + ' · Open-Meteo</div>' +
       (next ? '<div class="amb-next" style="' + App.pstyle(App.evColor(next)) + '"><i></i>' + App.esc(next.title) + ' · ' + App.fmt.time(next.start) + '</div>' : '') +
-      '<div class="amb-who">' + D.people.map(function (p) { return App.avatar(p, 34, p.home ? '' : 'avatar--away'); }).join('') + '</div>' +
+      '<div class="amb-who">' + D.people.map(function (p) { return App.avatar(p, 34, p.home || p.id === 'family' ? '' : 'avatar--away'); }).join('') + '</div>' +
       '</div>';
   }
   function nightInfo() {
@@ -34,19 +35,17 @@
   }
 
   App.on('ready', function () {
-    $('#ambient').innerHTML = '<div class="amb-stage"></div><div class="amb-scrim"></div><div class="amb-info"></div>';
+    $('#ambient').innerHTML = '<div class="amb-info"></div>';
     $('#night').innerHTML = '<div class="nt-inner"></div>';
-    amb.show = new App.Slideshow($('#ambient .amb-stage'), { layout: 'cover', captions: false, interval: 14000 });
     $('#ambient').addEventListener('click', function () { App.setMode('day'); App.go('home'); });
     $('#night').addEventListener('click', function () { App.setMode('nightdash'); });
   });
 
   App.on('mode', function (m) {
     clearInterval(shiftTimer);
-    if (m === 'ambient') { amb.show.start(); paint(); shiftTimer = setInterval(pixelShift, 60000); }
-    else amb.show.stop();
-    if (m === 'night') { paint(); shiftTimer = setInterval(pixelShift, 60000); }
+    if (m === 'ambient' || m === 'night') { paint(); shiftTimer = setInterval(pixelShift, 60000); }
     App.resetIdle();
   });
   App.on('minute', paint);
+  App.on('weather', paint);
 })();

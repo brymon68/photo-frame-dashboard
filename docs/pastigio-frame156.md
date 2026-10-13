@@ -1,136 +1,91 @@
-# Pastigio 15.6" Frameo frame (`FRAME156`, RK3326, Android 8.1)
+# Pastigio FRAME156: current setup and operation
 
-Record of one unit, started 2026-10-09. Observations are kept separate from guesses. Unique
-identifiers (serial, MAC, IP) are left out; they live in the ignored `backups/` and `diagnostics/` folders.
+This fork maintains the owner's working Pastigio dashboard. The installed setup
+was verified on 2026-10-12. It uses the frame's existing Android firmware and
+shipped `su`; setup installed an app and changed launcher/package settings.
+No firmware or raw partitions were rewritten.
 
-## Observations (read-only unless noted)
-
-### Identity
-
-| | |
+| Component | Installed setup |
 | --- | --- |
-| Brand / model | `Pastigio` / `FRAME156` (`ro.product.device=FRAME156`) |
-| Firmware | `FrameO.DP105F.v2026010414`, built 2026-01-04 |
-| Fingerprint | `rockchip/rk3326_32bit/rk3326_32bit:8.1.0/OC/145229:user/release-keys` |
-| SoC | Rockchip RK3326 (`ro.board.platform=rk3326`), ARMv8 cores with a 32-bit userspace (`armeabi-v7a`) |
-| Android | 8.1.0, API 27, security patch 2020-11-05 |
-| Display | 1920x1080, 170 dpi |
-| RAM / storage | about 1 GB RAM, 29 GB eMMC (`mmcblk2`), userdata 26 GB |
-| WebView | `com.android.webview` 106.0.5249.126 (already current for this repo's Vite target) |
-| Boot | verified boot `unsupported`, `ro.boot.flash.locked=1`, SELinux **permissive** on the kernel command line, `veritymode=enforcing` |
-| Wi-Fi | onboard radio works (`wlan0`) |
+| Frame | Pastigio FRAME156, Rockchip RK3326, 1920×1080 |
+| Android | 8.1.0, stock FrameO.DP105F.v2026010414 firmware |
+| WebView | 106.0.5249.126 |
+| Dashboard | Home HQ 1.12, `com.wesbos.homehq` |
+| Default Home | `com.wesbos.homehq/.Home`; startup after reboot verified |
+| Clock | Device time, `America/Denver` |
 
-USB: the stock "Enable transfer from computer" setting makes the frame enumerate as
-`FRAME156` (WinUSB) and then as an Android Open Accessory device (`18D1:2D00`). That is Frameo's
-photo-transfer mode, **not ADB**. ADB shows up (`18D1:0006`, product `FRAME156`) only after
-Frameo **Settings -> About -> Beta -> ADB Access** is enabled and "transfer from computer" is off.
+Frameo (`net.frameo.frame`) and the vendor updaters
+`com.muxintu.app.mxota` and `android.rockchip.update.service` are disabled.
+Their packages were not erased; Frameo's app data remains on the frame.
+Home HQ navigation supplies floating Back and Dashboard buttons outside the app.
 
-### Root
+## Connect and identify
 
-`adb shell su -c id` returns `uid=0(root)` immediately, with no prompt and no manager app. `/system/xbin/su` exists
-(75 KB, owner root). `adb shell` itself is uid 2000. **Any app on the frame can probably get root without asking.**
+Read `diagnostics/frame156-session/FRAME.md` for this owner's current connection
+details before device work. It is private and ignored by Git. The commands below
+use placeholders, not saved addresses.
 
-### Software of interest
+For Wi-Fi ADB:
 
-| Package | Location | Notes |
-| --- | --- | --- |
-| `net.frameo.frame` v1.29.13 | `/system/priv-app/DP_Frameo` | The slideshow app and the **HOME** activity. System app, cloud connected. |
-| `com.muxintu.app.mxota` v1.2.5 | `/system/app/MXOTA` | Vendor OTA updater with `INTERNET`. Disable before going online. |
-| `com.szclink.app.cldevicetest` | `/system/app/DP105DeviceTestSM` | Factory test app. |
-| `com.android.launcher3` | system | Stock launcher, disabled-by-default state not recorded. |
+```sh
+adb connect '<frame-address>:5555'
+adb -s '<frame-address>:5555' shell getprop ro.product.model
+adb -s '<frame-address>:5555' shell am start -n com.wesbos.homehq/.MainActivity
+```
 
-No browser installed.
+For the single USB device:
 
-### Partition table (eMMC `mmcblk2`, 512-byte sectors)
+```sh
+adb -d shell getprop ro.product.model
+adb -d shell am start -n com.wesbos.homehq/.MainActivity
+```
 
-| Partition | Name | Start | Size (sectors) |
-| --- | --- | --- | --- |
-| p1 | uboot | 16384 | 8192 |
-| p2 | trust | 24576 | 8192 |
-| p3 | misc | 32768 | 8192 |
-| p4 | resource | 40960 | 32768 |
-| p5 | kernel | 73728 | 65536 |
-| p6 | boot | 139264 | 77824 |
-| p7 | recovery | 217088 | 143360 |
-| p8 | backup | 360448 | 229376 |
-| p9 | security | 589824 | 8192 |
-| p10 | cache | 598016 | 786432 |
-| p11 | system | 1384448 | 3145728 |
-| p12 | metadata | 4530176 | 32768 |
-| p13 | vendor | 4562944 | 786432 |
-| p14 | oem | 5349376 | 262144 |
-| p15 | frp | 5611520 | 1024 |
-| p16 | userdata | 5612544 | 55450560 |
+The model must be `FRAME156` before making changes. Always select the transport:
+USB and Wi-Fi can list the same frame twice. Network ADB is already configured
+to persist across reboot. Its DHCP address can change; use the private notes for
+reconnection. Keep wall power connected when removing the USB data cable.
 
-## Backup (2026-10-09, verified)
+## Daily use
 
-`backups/<serial>/emmc-0-5612544.img.gz` (ignored by git): eMMC sectors 0-5,612,544, everything before `userdata`,
-2,873,622,528 bytes raw, 605.7 MB gzipped. The SHA-256 of the raw stream equals the gzip readback hash.
-No 1 MiB block is entirely `0xCC`. Independent re-reads match the backup for `uboot`, `trust`, `misc`, `resource`,
-`kernel`, `boot`, `recovery`, `security`, `backup`, `system` (all 1.5 GiB), `vendor`, `metadata` and `frp`.
-`oem` (mounted read-only at `/oem`) differs in one byte: byte 43 of the ext4 journal header page at
-partition offset `0x17000` is `0x02` now and `0x00` in the backup. That fits a journal flag the kernel sets at mount time, but
-it is a guess; fresh reads of `oem` are identical to each other. `cache` and `userdata` are not in the backup.
-`mmcblk2boot0/1`, `rpmb` and `userdata` were not backed up.
+- **Today, Calendar, Shopping, Home, and Agents** are the five views. The layout
+  fills the display while retaining its 800px logical height and text scale.
+- The packaged dashboard and local fonts load without a host server or internet.
+  The Photos view and photo slideshow are absent.
+- After two minutes idle, standby shows Ambient during the day and Night from
+  **21:00 to 06:00**. Both use a **5% window backlight override**. A tap restores
+  normal brightness; Night returns after another 20 seconds idle. The device's
+  saved brightness setting is unchanged.
+- One shared Google family calendar is read-only and refreshes every five
+  minutes. Albuquerque weather refreshes every 15 minutes in Fahrenheit/mph.
+  Both retain saved data during outages and label it accordingly.
+- Home controls, camera/media previews, scenes, and Agents usage remain demo
+  data. Light/blind dragging, lock holds, garage confirmation, and demo controls
+  are retained. They are not connected to household equipment or accounts.
 
-Two traps on this setup, both seen in practice:
+Hold two fingers still for 1.5 seconds to open the native menu: launcher,
+Android settings, or Reload dashboard. Outside Home HQ, use the floating Back
+and Dashboard buttons; drag their dots to move them. The service is enabled in
+Android **Settings → Accessibility → Home HQ navigation**.
 
-- **`adb exec-out "su -c ..."` turns every LF byte into CR LF**, so a raw `dd` stream is longer than the partition and
-  its hash is wrong. `stty -onlcr` and `dd of=/proc/self/fd/1` do not fix it. Piping through `base64` on the frame and
-  `tr -d '\r' | base64 -d` on the PC gives byte-exact data. This was the first backup attempt's failure
-  (2,879,386,296 bytes against 2,873,622,528 expected).
-- **`dd` on the whole-disk node `/dev/block/mmcblk2` cannot seek past 2 GiB** (`Invalid argument`, 32-bit userspace),
-  so re-reading `vendor` or `oem` by sector offset returns nothing. Read the partition node (`mmcblk2p13`) instead.
-  A sequential read from sector 0 (as the backup does) is fine.
+The clock may reset after power loss while offline. Android's network time
+corrected it after an online reboot; calendar date windows follow the correction.
+No hardware-clock fix was installed.
 
-Restore would need Rockchip loader mode and `rkdeveloptool`; neither has been tried on this unit.
+## Updates and maintenance
 
-## Status against the README phase map
+Use the [Mac kiosk build/update guide](../dashboard/kiosk/README.md). Retain the
+existing private signing key and update the app in place. A plain Vite build does
+not reproduce the installed offline font/image preparation; the guide separates
+that preparation from APK packaging. Source edits alone do not update the frame.
 
-| Phase | State |
-| --- | --- |
-| 1 Identify | Done. Not a BIUFRAME or Skylight, so neither device guide applies as written. |
-| 2 ADB | Done, via the Frameo beta menu. |
-| 3 Loader mode | Not needed so far. Not tested. |
-| 4 Back up | Done and verified (see Backup). Restore path untested. |
-| 5 Root | Shipped `su` works. |
-| 6 Make it useful | Done: kiosk installed and set as the Home app (see Changes made). The kiosk in this repo has no HOME intent filter; that was a local change, not included. |
-| 7 Networking | Onboard Wi-Fi works. |
-| 8 Vendor updates | Pending: disable `com.muxintu.app.mxota` before relying on the frame. |
-| 9 Security hand-off | Pending. |
+Use the [display viewer](frame-viewer.md) to inspect the actual screen from a
+browser. It uses an explicitly selected ADB transport and does not install
+anything on the frame.
 
-## Guesses (unverified)
-
-- Whether `/system` can be remounted read-write the way the BIUFRAME steps assume, given `veritymode=enforcing`.
-- Whether Frameo re-launches itself over a third-party HOME or kiosk app.
-- Whether Frameo's cloud or the OTA app can replace system files on their own.
-
-## Host note
-
-This host also runs SuperDisplay, whose bundled ADB v40 fights the current platform-tools
-server (v41) for the device. Stop its service while working on the frame.
-
-## Changes made to the frame (2026-10-09 to 10-10)
-
-All reversible; nothing under `/system` or any flash partition was written after the verified backup.
-
-| Change | How | Undo |
-| --- | --- | --- |
-| Vendor OTA app off | `pm disable-user --user 0 com.muxintu.app.mxota` | `pm enable com.muxintu.app.mxota` |
-| Frameo off | `pm disable-user --user 0 net.frameo.frame` | `pm enable net.frameo.frame` (its data is untouched) |
-| Kiosk installed | `adb install -r dashboard/kiosk/build/homehq.apk` (`com.wesbos.homehq`) | `adb uninstall com.wesbos.homehq` |
-
-Verified after a reboot: boots into the kiosk (set as the home app), `sys.boot_completed=1`, ADB returns, Frameo and the OTA app are not running.
-
-### Motion sensor
-
-A `pir-s18` node exists in the device tree with `status = "disabled"`; no driver is bound. Reading pin 17 of each GPIO
-bank (17, 49, 81, 113) for 45 s while someone moved in front of the frame showed no changes, so no working PIR was
-found; this does not rule out a fitted but unpowered sensor. Not pursued further for now.
-
-### Security notes for the owner
-
-- `su` gives root with no prompt and no manager app, so any app installed on this frame can take root. Install nothing untrusted.
-- Android 8.1 with a 2020-11 security patch; SELinux is permissive. Keep the frame on a guest or IoT network.
-- Management was done over USB ADB. Network ADB (5555) was also found open on the Wi-Fi address on 2026-10-10; how it was enabled was not recorded. Until it is closed, anything on the network can reach ADB, so keep the frame on an isolated network.
-
+Routine reconnection, inspection, and dashboard updates do not require another
+firmware capture. No saved firmware backup is currently available. Any future
+firmware or partition work is a separate task and
+must follow the repository's identity and backup requirements. Keep signing
+keys, calendar credentials, viewer links, and device identifiers in private
+ignored files. Keep network ADB on the trusted LAN and install only trusted apps;
+the frame's existing `su` grants root without a prompt.

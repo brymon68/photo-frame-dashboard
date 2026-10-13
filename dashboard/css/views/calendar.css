@@ -2,8 +2,7 @@
 .cal { height: 100%; display: flex; flex-direction: column; }
 #view-calendar { padding-top: 14px; }
 .cal-head { display: flex; align-items: center; gap: 8px; height: 52px; margin-bottom: 8px; flex: none; }
-.cal-head .icon-btn { width: 52px; height: 52px; }
-.cal-head .fab { width: 52px; height: 52px; }
+.cal-head .icon-btn, .cal-head .fab { width: 52px; height: 52px; }
 .cal-head .btn { min-height: 52px; padding: 0 20px; font-size: 15px; }
 .cal-head .seg { padding: 3px; }
 .cal-head .seg button { min-height: 46px; padding: 0 18px; font-size: 15px; }
@@ -11,6 +10,7 @@
 .cal-title .serif { font-size: 34px; line-height: 1; white-space: nowrap; }
 .cal-head [data-today] { margin-right: auto; }
 .cal-body { flex: 1; min-height: 0; position: relative; }
+.cal-sync { flex: none; color: var(--mute); font-size: 12px; margin: 0 6px 8px; }
 
 /* ---- time grid (Today + 3 day) */
 .cal-day { height: 100%; display: flex; flex-direction: column; position: relative; }
@@ -18,7 +18,6 @@
 .cal-3 .lanes-head { grid-template-columns: 64px repeat(3, 1fr); }
 .lane-head { display: flex; align-items: center; gap: 10px; padding: 0 12px 10px; border-bottom: 5px solid var(--c); margin: 0 4px; }
 .lane-head b { font-size: 22px; font-weight: 800; font-stretch: 80%; text-transform: uppercase; letter-spacing: .04em; }
-.lane-head small { margin-left: auto; font-size: var(--fs-min); color: var(--mute); font-weight: 700; }
 .day-head { display: flex; align-items: baseline; gap: 10px; padding: 0 14px 6px; margin: 0 4px; border-bottom: 5px solid var(--ink); }
 .day-head .num { font-size: 30px; line-height: .9; }
 .day-head b { font-size: 17px; font-weight: 800; font-stretch: 80%; text-transform: uppercase; letter-spacing: .05em; }
@@ -52,6 +51,9 @@
 .lane.is-today { background: rgba(17, 17, 17, .03); }
 .lane-fam { position: absolute; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none; }
 .lane-fam .ev { pointer-events: auto; }
+.cal--connected .cal-day .lanes,
+.cal--connected .cal-day .allday-grid { grid-template-columns: 1fr; }
+.cal--connected .cal-day .lanes-head { grid-template-columns: 64px 1fr; }
 
 /* event block */
 .ev {
@@ -175,8 +177,6 @@
 }
 .who-btn:active { transform: scale(.95); }
 .who-btn.is-on { background: rgb(var(--c-rgb) / .16); box-shadow: inset 0 0 0 3px var(--c); }
-.add-who--big { justify-content: space-between; }
-.add-who--big .who-btn { font-size: 22px; padding: 14px 18px; }
 .add-row { display: flex; gap: 36px; }
 
 .more-list { display: flex; flex-direction: column; gap: 8px; }

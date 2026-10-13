@@ -4,7 +4,7 @@
   var D = window.DATA;
   var V = { el: null, pending: {}, scene: null, camTimer: null, camAge: 4 };
 
-  function dev(id) { return D.devices.filter(function (d) { return d.id === id; })[0]; }
+  function dev(id) { return D.devices.find(function (d) { return d.id === id; }); }
 
   // Optimistic device update: flip immediately, confirm (or revert) shortly after.
   App.setDevice = function (id, patch, opts) {
@@ -23,49 +23,55 @@
   };
 
   // ------------------------------------------------------------ tiles
+  function levelText(d, level, on) {
+    if (d.type === 'light') return on ? level + '%' : 'Off';
+    return level === 0 ? 'Closed' : level === 100 ? 'Open' : level + '% open';
+  }
   function tile(d) {
-    var pend = V.pending[d.id] ? '<i class="pend"></i>' : '';
-    if (d.type === 'light') {
-      return '<div class="tile tile--light' + (d.on ? ' is-on' : '') + '" data-dev="' + d.id + '" style="--lvl:' + (d.on ? d.level : 0) + '%">' +
-        '<span class="tile-fill"></span>' + pend +
-        '<span class="tile-icon">' + App.icon('bulb', 28) + '</span>' +
-        '<span class="tile-name">' + d.name + '</span>' +
-        '<span class="tile-state num">' + (d.on ? d.level + '%' : 'Off') + '</span></div>';
-    }
-    if (d.type === 'blind') {
-      return '<div class="tile tile--blind' + (d.pos > 0 ? ' is-on' : '') + '" data-dev="' + d.id + '" style="--lvl:' + d.pos + '%">' +
-        '<span class="tile-fill"></span>' + pend +
-        '<span class="tile-icon">' + App.icon('blinds', 28) + '</span>' +
-        '<span class="tile-name">' + d.name + '</span>' +
-        '<span class="tile-state num">' + (d.pos === 0 ? 'Closed' : d.pos === 100 ? 'Open' : d.pos + '% open') + '</span></div>';
-    }
-    if (d.type === 'lock') {
-      return '<div class="tile tile--lock' + (d.locked ? '' : ' is-warn') + '" data-dev="' + d.id + '">' + pend +
-        '<span class="tile-icon">' + App.icon(d.locked ? 'lock' : 'unlock', 28) + '</span>' +
-        '<span class="tile-name">' + d.name + '</span>' +
-        '<span class="tile-state">' + (d.locked ? 'Locked<small>Hold to unlock</small>' : 'Unlocked<small>Tap to lock</small>') + '</span>' +
-        '<svg class="hold-ring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17"/></svg></div>';
-    }
-    if (d.type === 'garage') {
-      var label = { closed: 'Closed', open: 'Open', opening: 'Opening…', closing: 'Closing…' }[d.state];
-      return '<div class="tile tile--garage' + (d.state !== 'closed' ? ' is-warn' : '') + (/ing$/.test(d.state) ? ' is-moving' : '') + '" data-dev="' + d.id + '">' + pend +
-        '<span class="tile-icon">' + App.icon('garage', 28) + '</span>' +
-        '<span class="tile-name">' + d.name + '</span>' +
-        '<span class="tile-state">' + label + '</span></div>';
-    }
-    return '';
+    var light = d.type === 'light', slider = light || d.type === 'blind';
+    var cls, icon, state, level;
+    if (slider) {
+      var on = light ? d.on : d.pos > 0;
+      level = light ? (d.on ? d.level : 0) : d.pos;
+      cls = on ? ' is-on' : '';
+      icon = light ? 'bulb' : 'blinds';
+      state = levelText(d, level, on);
+    } else if (d.type === 'lock') {
+      cls = d.locked ? '' : ' is-warn';
+      icon = d.locked ? 'lock' : 'unlock';
+      state = d.locked ? 'Locked<small>Hold to unlock</small>' : 'Unlocked<small>Tap to lock</small>';
+    } else if (d.type === 'garage') {
+      cls = (d.state !== 'closed' ? ' is-warn' : '') + (/ing$/.test(d.state) ? ' is-moving' : '');
+      icon = 'garage';
+      state = { closed: 'Closed', open: 'Open', opening: 'Opening…', closing: 'Closing…' }[d.state];
+    } else return '';
+    return '<div class="tile tile--' + d.type + cls + '" data-dev="' + d.id + '"' + (slider ? ' style="--lvl:' + level + '%"' : '') + '>' +
+      (slider ? '<span class="tile-fill"></span>' : '') + (V.pending[d.id] ? '<i class="pend"></i>' : '') +
+      '<span class="tile-icon">' + App.icon(icon, 28) + '</span>' +
+      '<span class="tile-name">' + d.name + '</span>' +
+      '<span class="tile-state' + (slider ? ' num' : '') + '">' + state + '</span>' +
+      (d.type === 'lock' ? '<svg class="hold-ring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17"/></svg>' : '') + '</div>';
   }
 
+  function summaryCard(kind, title, value, detail, tone) {
+    return '<button class="sum' + (tone ? ' sum--' + tone : '') + '" data-sum="' + kind + '"><span class="label">' + title + '</span><b class="num">' + value + '</b><small>' + detail + '</small></button>';
+  }
+  function climateVerb() {
+    var c = D.climate;
+    return c.mode === 'off' ? 'Off' : c.set > c.current ? 'Heating' : c.set < c.current ? 'Cooling' : 'Holding';
+  }
   function summary() {
     var lights = D.devices.filter(function (d) { return d.type === 'light' && d.on; });
     var unlocked = D.devices.filter(function (d) { return d.type === 'lock' && !d.locked; });
     var garage = dev('g-door');
-    var secure = !unlocked.length && garage.state === 'closed';
+    var garageOpen = garage.state !== 'closed', secure = !unlocked.length && !garageOpen;
+    var unsecured = unlocked.map(function (u) { return u.name; }).join(', ');
+    if (garageOpen) unsecured = 'Garage ' + garage.state + (unsecured ? ' · ' + unsecured : '');
     var c = D.climate, m = D.media;
-    return '<button class="sum' + (lights.length ? ' sum--warm' : '') + '" data-sum="lights"><span class="label">Lights</span><b class="num">' + lights.length + '</b><small>on in ' + unique(lights.map(function (l) { return l.room; })).length + ' rooms</small></button>' +
-      '<button class="sum' + (secure ? '' : ' sum--warn') + '" data-sum="security"><span class="label">Security</span><b class="num">' + (secure ? 'Locked' : unlocked.length + (garage.state !== 'closed' ? 1 : 0)) + '</b><small>' + (secure ? 'All doors + garage' : (garage.state !== 'closed' ? 'Garage ' + garage.state : '') + (unlocked.length ? (garage.state !== 'closed' ? ' · ' : '') + unlocked.map(function (u) { return u.name; }).join(', ') : '') + (secure ? '' : ' open')) + '</small></button>' +
-      '<button class="sum" data-sum="climate"><span class="label">Climate</span><b class="num">' + c.current + '°</b><small>' + (c.mode === 'off' ? 'System off' : (c.set > c.current ? 'Heating' : c.set < c.current ? 'Cooling' : 'Holding') + ' to ' + c.set + '°') + '</small></button>' +
-      '<button class="sum" data-sum="media"><span class="label">Media</span><b class="num">' + (m.playing ? 'Playing' : 'Paused') + '</b><small>' + m.room + ' speaker</small></button>';
+    return summaryCard('lights', 'Lights', lights.length, 'on in ' + unique(lights.map(function (l) { return l.room; })).length + ' rooms', lights.length ? 'warm' : '') +
+      summaryCard('security', 'Security', secure ? 'Locked' : unlocked.length + (garageOpen ? 1 : 0), secure ? 'All doors + garage' : unsecured + ' open', secure ? '' : 'warn') +
+      summaryCard('climate', 'Climate', c.current + '°', c.mode === 'off' ? 'System off' : climateVerb() + ' to ' + c.set + '°') +
+      summaryCard('media', 'Media', m.playing ? 'Playing' : 'Paused', m.room + ' speaker');
   }
   function unique(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); }
 
@@ -82,15 +88,13 @@
   function rooms() {
     return D.rooms.map(function (r) {
       var list = D.devices.filter(function (d) { return d.room === r.id; });
-      var on = list.filter(function (d) { return d.type === 'light' && d.on; }).length;
       return '<section class="room"><div class="room-h"><h3 class="serif">' + r.name + '</h3><span class="label" data-room-count="' + r.id + '">' + roomCount(r.id) + '</span></div>' +
         '<div class="tiles">' + list.map(tile).join('') + '</div></section>';
     }).join('');
   }
 
   function climate() {
-    var c = D.climate;
-    var verb = c.mode === 'off' ? 'Off' : c.set > c.current ? 'Heating' : c.set < c.current ? 'Cooling' : 'Holding';
+    var c = D.climate, verb = climateVerb();
     return '<div class="label label--light">Climate · Main floor</div>' +
       '<div class="th-main"><button class="th-btn" data-temp="-0.5" aria-label="Cooler">' + App.icon('minus', 36) + '</button>' +
       '<div class="th-set"><span class="num">' + c.set.toFixed(1).replace('.0', '') + '°</span><small>Set to</small></div>' +
@@ -130,24 +134,20 @@
     var c = V.el && V.el.querySelector('[data-room-count="' + d.room + '"]');
     if (c) c.textContent = roomCount(d.room);
   }
-  function paintPart(sel, html) { if (V.el) V.el.querySelector(sel).innerHTML = html; }
   function changed(ids) {
     ids.forEach(paintTile);
-    paintPart('.hc-sum', summary());
+    paint(['sum']);
     App.emit('data');
   }
 
-  function paint() {
+  var parts = { cams: cams, sum: summary, scenes: scenes, rooms: rooms, climate: climate, media: media };
+  function paint(names) {
     if (!V.el) return;
-    var el = V.el;
-    el.querySelector('.hc-sum').innerHTML = summary();
-    el.querySelector('.hc-scenes').innerHTML = scenes();
-    var rs = el.querySelector('.hc-rooms'), st = rs.scrollTop;
-    rs.innerHTML = rooms();
-    rs.scrollTop = st;
-    bindTiles(rs);
-    el.querySelector('.hc-climate').innerHTML = climate();
-    el.querySelector('.hc-media').innerHTML = media();
+    (names || Object.keys(parts)).forEach(function (name) {
+      var el = V.el.querySelector('.hc-' + name), scroll = name === 'rooms' ? el.scrollTop : 0;
+      el.innerHTML = parts[name]();
+      if (name === 'rooms') { el.scrollTop = scroll; bindTiles(el); }
+    });
   }
 
   // ------------------------------------------------------------ tile gestures
@@ -167,7 +167,7 @@
       var lvl = Math.max(0, Math.min(100, Math.round(startLvl + dx / w * 100)));
       t.style.setProperty('--lvl', lvl + '%');
       t.classList.toggle('is-on', lvl > 0);
-      t.querySelector('.tile-state').textContent = d.type === 'light' ? (lvl ? lvl + '%' : 'Off') : (lvl === 0 ? 'Closed' : lvl === 100 ? 'Open' : lvl + '% open');
+      t.querySelector('.tile-state').textContent = levelText(d, lvl, lvl > 0);
       t._lvl = lvl;
     });
     t.addEventListener('pointerup', function () {
@@ -187,19 +187,17 @@
 
   function bindTiles(root) { App.$$('[data-dev]', root).forEach(bindTile); }
   function bindTile(t) {
-    (function () {
-      var d = dev(t.dataset.dev);
-      if (d.type === 'light' || d.type === 'blind') sliderTile(t, d);
-      if (d.type === 'lock') {
-        App.hold(t, 1000, {
-          enabled: function () { return d.locked; },
-          done: function () { V.lastHold = Date.now(); App.setDevice(d.id, { locked: false }); App.toast('<b>' + d.name + '</b> unlocked', { icon: 'unlock' }); },
-          cancel: function () { App.toast('Hold for a second to unlock <b>' + d.name + '</b>', { icon: 'lock', ms: 2200 }); }
-        });
-        t.addEventListener('click', function () { if (!d.locked && Date.now() - (V.lastHold || 0) > 800) App.setDevice(d.id, { locked: true }); });
-      }
-      if (d.type === 'garage') t.addEventListener('click', function () { App.openGarageSheet(); });
-    })();
+    var d = dev(t.dataset.dev);
+    if (d.type === 'light' || d.type === 'blind') sliderTile(t, d);
+    if (d.type === 'lock') {
+      App.hold(t, 1000, {
+        enabled: function () { return d.locked; },
+        done: function () { V.lastHold = Date.now(); App.setDevice(d.id, { locked: false }); App.toast('<b>' + d.name + '</b> unlocked', { icon: 'unlock' }); },
+        cancel: function () { App.toast('Hold for a second to unlock <b>' + d.name + '</b>', { icon: 'lock', ms: 2200 }); }
+      });
+      t.addEventListener('click', function () { if (!d.locked && Date.now() - (V.lastHold || 0) > 800) App.setDevice(d.id, { locked: true }); });
+    }
+    if (d.type === 'garage') t.addEventListener('click', function () { App.openGarageSheet(); });
   }
 
   // Slide-to-confirm for the garage
@@ -210,31 +208,37 @@
       '<div class="slide-confirm"><span class="sc-label">Slide to ' + (opening ? 'open' : 'close') + ' →</span><span class="sc-fill"></span><span class="sc-knob">' + App.icon('garage', 30) + '</span></div></div>', {
       onMount: function (s, close) {
         var track = s.querySelector('.slide-confirm'), knob = s.querySelector('.sc-knob'), fill = s.querySelector('.sc-fill');
-        var sx = null, max;
+        var sx = null, max, x = null, limit;
+        function reset() {
+          sx = null; x = null;
+          knob.style.transform = ''; fill.style.width = '';
+        }
         knob.addEventListener('pointerdown', function (e) {
+          reset();
           sx = e.clientX; max = track.getBoundingClientRect().width - knob.getBoundingClientRect().width - 8;
           knob.setPointerCapture(e.pointerId);
         });
         knob.addEventListener('pointermove', function (e) {
           if (sx == null) return;
-          var k = App.$('#stage').getBoundingClientRect().width / 1280;
-          var x = Math.max(0, Math.min(max / k, (e.clientX - sx) / k));
+          var k = App.$('#stage').getBoundingClientRect().height / 800;
+          limit = max / k;
+          x = Math.max(0, Math.min(limit, (e.clientX - sx) / k));
           knob.style.transform = 'translateX(' + x + 'px)';
           fill.style.width = (x + 76) + 'px';
-          knob._x = x; knob._max = max / k;
         });
         knob.addEventListener('pointerup', function () {
           if (sx == null) return;
           sx = null;
 
-          if (knob._x >= knob._max - 6) {
+          if (x !== null && x >= limit - 6) {
             close();
             g.state = opening ? 'opening' : 'closing';
             V.scene = null;
             changed(['g-door']);
             setTimeout(function () { g.state = opening ? 'open' : 'closed'; changed(['g-door']); App.toast('Garage ' + g.state, { icon: 'garage', ms: 2500 }); }, 4000);
-          } else { knob.style.transform = ''; fill.style.width = ''; }
+          } else reset();
         });
+        knob.addEventListener('pointercancel', reset);
       }
     });
   };
@@ -274,7 +278,7 @@
   }
 
   function applyScene(id) {
-    var s = D.scenes.filter(function (x) { return x.id === id; })[0];
+    var s = D.scenes.find(function (x) { return x.id === id; });
     var snapshot = D.devices.map(function (d) { return Object.assign({}, d); });
     var prevScene = V.scene;
     Object.keys(s.set).forEach(function (k) {
@@ -285,18 +289,15 @@
     });
     if (id === 'away' || id === 'night') D.devices.forEach(function (d) { if (d.type === 'lock') d.locked = true; });
     V.scene = id;
-    function diff() {
-      return snapshot.filter(function (o) { var d = dev(o.id); return o.on !== d.on || o.level !== d.level || o.pos !== d.pos || o.locked !== d.locked; })
-        .map(function (o) { return o.id; });
-    }
-    var ids = diff();
-    paintPart('.hc-scenes', scenes());
+    var ids = snapshot.filter(function (o) { var d = dev(o.id); return o.on !== d.on || o.level !== d.level || o.pos !== d.pos || o.locked !== d.locked; })
+      .map(function (o) { return o.id; });
+    paint(['scenes']);
     changed(ids);
     App.toast('<b>' + s.name + '</b> scene on', {
       icon: s.icon, undo: function () {
         snapshot.forEach(function (o) { Object.assign(dev(o.id), o); });
         V.scene = prevScene;
-        paintPart('.hc-scenes', scenes());
+        paint(['scenes']);
         changed(ids);
       }
     });
@@ -318,10 +319,10 @@
       return climateChanged();
     }
     if ((t = e.target.closest('[data-tmode]'))) { D.climate.mode = t.dataset.tmode; return climateChanged(); }
-    if ((t = e.target.closest('[data-cam]'))) return App.cameraSheet(D.cameras.filter(function (c) { return c.id === t.dataset.cam; })[0]);
-    if ((t = e.target.closest('[data-play]'))) { D.media.playing = !D.media.playing; paintPart('.hc-media', media()); paintPart('.hc-sum', summary()); }
+    if ((t = e.target.closest('[data-cam]'))) return App.cameraSheet(D.cameras.find(function (c) { return c.id === t.dataset.cam; }));
+    if ((t = e.target.closest('[data-play]'))) { D.media.playing = !D.media.playing; paint(['media', 'sum']); }
   }
-  function climateChanged() { paintPart('.hc-climate', climate()); paintPart('.hc-sum', summary()); App.emit('data'); }
+  function climateChanged() { paint(['climate', 'sum']); App.emit('data'); }
 
   function camTimer() {
     clearInterval(V.camTimer);
@@ -341,7 +342,6 @@
           '</div>';
         el.addEventListener('click', onClick);
       }
-      el.querySelector('.hc-cams').innerHTML = cams();
       paint();
       camTimer();
     },
