@@ -10,6 +10,11 @@ the default launcher with Home HQ; we did not replace Android or flash new
 firmware.** The recorded installed app is Home HQ 1.12. Repository changes are
 not installed automatically.
 
+New builds are Home HQ 1.13 under `com.brymon68.homehq`, signed with a separate
+brymon68 key. This personal app is prepared for a separate installation; the
+existing frame has not been migrated. Follow the
+[migration guide](docs/migrate-to-brymon68.md) before switching launchers.
+
 ## How we got here
 
 1. Enabled ADB through Frameo's Beta/ADB Access settings and authorized the Mac.
@@ -84,13 +89,44 @@ complete replacement package by itself.
 Read the ignored `diagnostics/frame156-session/FRAME.md` before accessing this
 owner's frame. Always select one ADB transport explicitly (`adb -d` for the
 single USB device, or `adb -s <address>:5555` for Wi-Fi) and verify the model is
-`FRAME156` before changes. Preserve the current design, drag controls, private
-calendar configuration, and Android package identity.
+`FRAME156` before changes. Preserve the current design, drag controls, and private
+calendar configuration. Keep the installed app intact until the personal app's
+migration and checks are complete.
 
-Keep the existing private signing key and current known-good APK. Android needs
-the same signing identity to accept an in-place update and preserve app data.
-Old installer versions are not needed to build future updates. Do not uninstall
-the app as a shortcut around a signing mismatch.
+Keep the current installer and its signing key alongside the new personal app's
+key and password file. Android needs the same signing identity for updates to
+each respective package. Do not uninstall the working app to get around a
+signing mismatch.
+
+## App identity and signing
+
+This fork is maintained under `brymon68`. The package identifier and signing
+certificate are separate parts of an Android app's identity:
+
+| | Installed app | Prepared personal app |
+| --- | --- | --- |
+| Version | 1.12 | 1.13 |
+| Package | `com.wesbos.homehq` | `com.brymon68.homehq` |
+| Certificate subject | `CN=Android Debug, O=Android, C=US` | `CN=brymon68, O=Home HQ` |
+| Status | Current default launcher | Built separately; not installed |
+
+The existing certificate was checked against the retained installer and keystore;
+it does not name Wes Bos. The personal app has a newly generated RSA-3072 key
+and a random password, stored only in ignored private files. The builder reads
+the passwords from files rather than hardcoded values. Retain both signing
+identities during migration; future personal-app updates use the brymon68 key.
+
+The new package gets its own app storage. Calendar configuration, saved settings,
+default Home selection, and the accessibility service require migration. Android
+8.1 cannot use the signing-key rotation introduced in
+[Android 9's APK signature scheme v3](https://source.android.com/docs/security/features/apksigning/v3).
+Changing the certificate on the existing package therefore cannot be an ordinary
+in-place update. See Android's
+[signing considerations](https://developer.android.com/studio/publish/app-signing#considerations).
+The [migration guide](docs/migrate-to-brymon68.md) separates preparation from
+installation and validation. No migration has been applied to the installed frame.
+
+## Firmware changes
 
 Future firmware or partition changes are outside routine dashboard maintenance:
 identify the exact device, obtain approval for that work, and create and verify

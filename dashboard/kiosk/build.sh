@@ -2,18 +2,29 @@
 # Builds kiosk/build/homehq.apk without Gradle. Needs JDK 17 + Android build-tools 34 + platform 34:
 #   brew install --cask android-commandlinetools
 #   sdkmanager --sdk_root=$ANDROID_HOME "build-tools;34.0.0" "platforms;android-34"
-# Set KIOSK_KEYSTORE to the retained signing key used for the installed app.
-# Install on the tablet: adb install -r kiosk/build/homehq.apk
+# Set KIOSK_KEYSTORE and KIOSK_KEYSTORE_PASSWORD_FILE to the personal app's private signing files.
+# Follow README.md for the separate app migration and later updates.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
 BT="$ANDROID_HOME/build-tools/34.0.0"
 JAR="$ANDROID_HOME/platforms/android-34/android.jar"
-KS="${KIOSK_KEYSTORE:?Set KIOSK_KEYSTORE to the retained signing key used for the installed app}"
-if [[ "$KS" != /* || ! -f "$KS" || ! -r "$KS" ]]; then
-  echo "KIOSK_KEYSTORE must be an absolute path to the existing readable signing key." >&2
-  exit 1
+KS="${KIOSK_KEYSTORE:?Set KIOSK_KEYSTORE to the brymon68 app signing key}"
+KS_PASS_FILE="${KIOSK_KEYSTORE_PASSWORD_FILE:?Set KIOSK_KEYSTORE_PASSWORD_FILE to its private password file}"
+KEY_PASS_FILE="${KIOSK_KEY_PASSWORD_FILE:-$KS_PASS_FILE}"
+KEY_ALIAS="${KIOSK_KEY_ALIAS:-homehq-brymon68}"
+for signing_input in "$KS" "$KS_PASS_FILE" "$KEY_PASS_FILE"; do
+  if [[ "$signing_input" != /* || ! -f "$signing_input" || ! -r "$signing_input" ]]; then
+    echo "Signing key and password files must be existing readable absolute paths." >&2
+    exit 1
+  fi
+done
+# apksigner reuses the store password by default; reading the same file twice
+# consumes a second line, so supply a key password only from a separate file.
+SIGNING_ARGS=(--ks "$KS" --ks-key-alias "$KEY_ALIAS" --ks-pass "file:$KS_PASS_FILE")
+if [[ "$KEY_PASS_FILE" != "$KS_PASS_FILE" ]]; then
+  SIGNING_ARGS+=(--key-pass "file:$KEY_PASS_FILE")
 fi
 
 rm -rf build && mkdir -p build/gen build/classes
@@ -31,14 +42,16 @@ fi
 
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link -o build/base.apk -I "$JAR" --manifest AndroidManifest.xml build/res.zip \
-  --java build/gen --min-sdk-version 23 --target-sdk-version 23 --version-code 13 --version-name 1.12 "${ASSETS[@]}"
+  --java build/gen --min-sdk-version 23 --target-sdk-version 23 --version-code 14 --version-name 1.13 "${ASSETS[@]}"
 
 javac -nowarn -source 8 -target 8 -classpath "$JAR" -d build/classes \
-  src/com/wesbos/homehq/*.java build/gen/com/wesbos/homehq/R.java
+  src/com/brymon68/homehq/*.java build/gen/com/brymon68/homehq/R.java
 
 "$BT/d8" --min-api 23 --lib "$JAR" --output build $(find build/classes -name '*.class')
 (cd build && zip -qj base.apk classes.dex)
 "$BT/zipalign" -f 4 build/base.apk build/aligned.apk
 
-"$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android --out build/homehq.apk build/aligned.apk
+"$BT/apksigner" sign "${SIGNING_ARGS[@]}" \
+  --out build/homehq.apk build/aligned.apk
+"$BT/apksigner" verify build/homehq.apk
 echo "Built kiosk/build/homehq.apk"

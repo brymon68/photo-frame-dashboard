@@ -115,8 +115,8 @@ public class JSONArray {
   public double getDouble(int index) { return value.get(index).getAsDouble(); }
 }
 ''',
-    'com/wesbos/homehq/MainActivity.java': '''
-package com.wesbos.homehq;
+    'com/brymon68/homehq/MainActivity.java': '''
+package com.brymon68.homehq;
 class MainActivity { static final String BUNDLED_HOST = "appassets.androidplatform.net"; }
 ''',
 }
@@ -124,7 +124,7 @@ class MainActivity { static final String BUNDLED_HOST = "appassets.androidplatfo
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source-dir', type=Path, default=Path(__file__).resolve().parents[1] / 'src/com/wesbos/homehq')
+    parser.add_argument('--source-dir', type=Path, default=Path(__file__).resolve().parents[1] / 'src/com/brymon68/homehq')
     parser.add_argument('--java-home', type=Path, default=os.environ.get('JAVA_HOME'))
     parser.add_argument('--gson-jar', type=Path, required=True)
     args = parser.parse_args()
@@ -144,7 +144,7 @@ def main():
         javac = args.java_home / 'bin/javac' if args.java_home else 'javac'
         java = args.java_home / 'bin/java' if args.java_home else 'java'
         subprocess.run([str(javac), '--release', '8', '-cp', str(args.gson_jar), '-d', str(root), *map(str, sources)], check=True)
-        subprocess.run([str(java), '-cp', os.pathsep.join((str(root), str(args.gson_jar))), 'com.wesbos.homehq.FeedTest', str(root)], check=True)
+        subprocess.run([str(java), '-cp', os.pathsep.join((str(root), str(args.gson_jar))), 'com.brymon68.homehq.FeedTest', str(root)], check=True)
 
 
 if __name__ == '__main__':

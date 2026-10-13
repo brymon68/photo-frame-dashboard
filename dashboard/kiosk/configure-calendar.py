@@ -36,13 +36,13 @@ def main():
 
     if adb('shell', 'getprop ro.product.model') != args.model:
         raise RuntimeError('Device model does not match; no changes made')
-    package = adb('shell', 'dumpsys package com.wesbos.homehq')
+    package = adb('shell', 'dumpsys package com.brymon68.homehq')
     match = re.search(r'\buserId=(\d+)\b', package)
     if not match:
         raise RuntimeError('Install Home HQ before configuring its calendar')
     uid = match.group(1)
     temporary = '/data/local/tmp/homehq-calendar-' + secrets.token_hex(8)
-    destination = '/data/data/com.wesbos.homehq/files'
+    destination = '/data/data/com.brymon68.homehq/files'
     try:
         adb('shell', 'umask 077; cat > ' + temporary, data=(value + '\n').encode())
         adb('shell', "su -c 'mkdir -p " + destination + ' && cp ' + temporary + ' ' + destination + '/calendar-url.txt'

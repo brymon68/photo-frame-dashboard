@@ -5,6 +5,11 @@ was verified on 2026-10-12. It uses the frame's existing Android firmware and
 shipped `su`; setup installed an app and changed launcher/package settings.
 No firmware or raw partitions were rewritten.
 
+The repository now builds a separate personal app, Home HQ 1.13 under
+`com.brymon68.homehq`, with its own brymon68 signing key. It is prepared but not
+installed. The table and access commands below describe the current 1.12 app;
+use the [migration guide](migrate-to-brymon68.md) before changing the default Home.
+
 | Component | Installed setup |
 | --- | --- |
 | Frame | Pastigio FRAME156, Rockchip RK3326, 1920×1080 |
@@ -73,8 +78,9 @@ No hardware-clock fix was installed.
 
 ## Updates and maintenance
 
-Use the [Mac kiosk build/update guide](../dashboard/kiosk/README.md). Retain the
-existing private signing key and update the app in place. A plain Vite build does
+Use the [Mac kiosk build/update guide](../dashboard/kiosk/README.md) for personal
+builds. The first personal installation needs a separate migration; only later
+updates to that same package and signing key are in-place updates. A plain Vite build does
 not reproduce the installed offline font/image preparation; the guide separates
 that preparation from APK packaging. Source edits alone do not update the frame.
 

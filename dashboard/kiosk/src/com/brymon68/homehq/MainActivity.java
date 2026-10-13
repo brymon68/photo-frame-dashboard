@@ -1,4 +1,4 @@
-package com.wesbos.homehq;
+package com.brymon68.homehq;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -33,8 +33,8 @@ import java.io.InputStream;
  * - Controls: hold two fingers still on the screen for 1.5s for launcher/settings/reload.
  * - Remote debugging is OFF unless launched with the debug extra (every app on this device
  *   gets root, so the devtools socket should only exist while actively debugging):
- *     adb shell am start -n com.wesbos.homehq/.MainActivity --ez debug true
- * - Launch with a URL: adb shell am start -a android.intent.action.VIEW -d <url> -n com.wesbos.homehq/.MainActivity
+ *     adb shell am start -n com.brymon68.homehq/.MainActivity --ez debug true
+ * - Launch with a URL: adb shell am start -a android.intent.action.VIEW -d <url> -n com.brymon68.homehq/.MainActivity
  */
 public class MainActivity extends Activity {
   static final String TAG = "HomeHQ";
