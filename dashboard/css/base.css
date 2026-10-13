@@ -37,7 +37,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .label--light { color: rgba(255, 255, 255, .72); }
 .label--on { color: var(--c-ink); opacity: .8; }
 
-/* ---------------------------------------------------------------- stage (fixed 1280×800) */
+/* ---------------------------------------------------------------- stage (1280×800 minimum; widens to fit) */
 .stage {
   position: absolute;
   left: 50%; top: 50%;
@@ -53,7 +53,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 /* ---------------------------------------------------------------- rail */
 .rail {
   display: flex; flex-direction: column;
-  padding: 8px 0 12px;
+  padding: 0 0 12px;
   border-right: 2px solid var(--ink);
   background: var(--paper);
   z-index: 5;
@@ -83,7 +83,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 /* ---------------------------------------------------------------- components */
 .card { background: var(--card); border-radius: var(--r); padding: 18px 20px; position: relative; }
 button.card { display: block; width: 100%; }
-button.card:active, .h-hero:active, .h-photo:active { transform: scale(.985); }
+button.card:active, .h-hero:active { transform: scale(.985); }
 
 .avatar {
   flex: none;
@@ -157,8 +157,6 @@ button.card:active, .h-hero:active, .h-photo:active { transform: scale(.985); }
 .pill--alert { background: #fff; color: var(--alert); }
 .pulse { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
 
-.ring-bg { fill: none; stroke: rgb(var(--c-rgb) / .16); stroke-width: 7; }
-.ring-fg { fill: none; stroke: var(--c); stroke-width: 7; stroke-linecap: round; }
 
 /* ---------------------------------------------------------------- toasts */
 .toasts { position: absolute; left: 76px; right: 0; bottom: 24px; display: flex; justify-content: center; pointer-events: none; z-index: 60; }

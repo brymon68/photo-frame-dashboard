@@ -9,13 +9,24 @@ cd "$(dirname "$0")"
 ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
 BT="$ANDROID_HOME/build-tools/34.0.0"
 JAR="$ANDROID_HOME/platforms/android-34/android.jar"
-KS="$HOME/.android/debug.keystore"
+KS="${KIOSK_KEYSTORE:-$HOME/.android/debug.keystore}"
 
 rm -rf build && mkdir -p build/gen build/classes
 
+ASSETS=()
+if [ "${BUNDLE_DASHBOARD:-0}" = "1" ]; then
+  if [ ! -f ../dist/index.html ]; then
+    echo "Build the dashboard first: npm run build -- --base=./" >&2
+    exit 1
+  fi
+  mkdir -p build/assets/dashboard
+  cp -R ../dist/. build/assets/dashboard/
+  ASSETS=(-A build/assets)
+fi
+
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link -o build/base.apk -I "$JAR" --manifest AndroidManifest.xml build/res.zip \
-  --java build/gen --min-sdk-version 23 --target-sdk-version 23 --version-code 2 --version-name 1.1
+  --java build/gen --min-sdk-version 23 --target-sdk-version 23 --version-code 13 --version-name 1.12 "${ASSETS[@]}"
 
 javac -nowarn -source 8 -target 8 -classpath "$JAR" -d build/classes \
   src/com/wesbos/homehq/*.java build/gen/com/wesbos/homehq/R.java

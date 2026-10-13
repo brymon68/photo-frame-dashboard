@@ -102,14 +102,17 @@
         var list = App.timedOn(day, p.id).filter(function (e) { return !App.isFamily(e); });
         return '<div class="lane" style="' + App.pstyle(p) + '">' + placeBlocks(list, null, p.id) + '</div>';
       }).join('') +
-      '<div class="lane-fam">' + fam.map(function (e) {
+      '<div class="lane-fam">' + (App.calendar && App.calendar.readOnly ? placeBlocks(fam) : fam.map(function (e) {
         var b = clampTop(e, day);
         return evBlock(e, 'top:' + b.top + 'px;height:' + b.h + 'px;left:2px;right:2px');
-      }).join('') + '</div>' +
+      }).join('')) + '</div>' +
       nowLine([day]) + '</div>' +
       '</div></div>';
-    var empty = !App.timedOn(day).length ? '<div class="cal-empty serif">Nothing on the calendar.<br><i>A rare, quiet day.</i></div>' : '';
-    return '<div class="cal-day">' + ad + grid + empty + '</div>';
+    var pending = App.calendar && App.calendar.readOnly && !App.calendar.updated;
+    var empty = !App.timedOn(day).length && !allDay.length ? '<div class="cal-empty serif">' +
+      (pending ? (App.calendar.error ? 'Calendar unavailable.<br><i>Trying again soon.</i>' : 'Loading your calendar…') : 'Nothing on the calendar.<br><i>A rare, quiet day.</i>') + '</div>' : '';
+    var head = App.calendar && App.calendar.readOnly ? '<div class="lanes-head"><div class="gutter"></div><div class="lane-head" style="' + App.pstyle(D.family) + '">' + App.avatar(D.family, 30) + '<b>Family</b></div></div>' : '';
+    return '<div class="cal-day">' + head + ad + grid + empty + '</div>';
   }
 
   // ------------------------------------------------------------ 3 day
@@ -197,13 +200,15 @@
       '<button class="icon-btn" data-nav="1" aria-label="Next">' + App.icon('right', 24) + '</button>' +
       '<button class="btn btn--ghost' + (isToday ? ' is-hidden' : '') + '" data-today>Today</button>' +
       '<div class="seg">' + MODES.map(function (m) { return '<button class="' + (V.mode === m[0] ? 'is-on' : '') + '" data-mode="' + m[0] + '">' + m[1] + '</button>'; }).join('') + '</div>' +
-      '<button class="fab" data-add aria-label="Add event">' + App.icon('plus', 26) + '</button>' +
+      (App.calendar && App.calendar.readOnly ? '' : '<button class="fab" data-add aria-label="Add event">' + App.icon('plus', 26) + '</button>') +
       '</header>';
   }
 
   function render() {
+    if (App.calendar && App.calendar.readOnly) App.calendar.cover(V.date);
     var body = { day: dayView, '3day': threeDay, week: weekView, month: monthView }[V.mode]();
-    V.el.innerHTML = '<div class="cal cal--' + V.mode + '">' + header() + '<div class="cal-body">' + body + '</div></div>';
+    var sync = App.calendar && App.calendar.readOnly ? '<div class="cal-sync" role="status">Family · Google Calendar · Read only · ' + App.esc(App.calendar.label()) + '</div>' : '';
+    V.el.innerHTML = '<div class="cal cal--' + V.mode + (App.calendar && App.calendar.readOnly ? ' cal--connected' : '') + '">' + header() + sync + '<div class="cal-body">' + body + '</div></div>';
     var sc = V.el.querySelector('.grid-scroll');
     if (sc) {
       var now = App.now();
@@ -232,7 +237,7 @@
       return render();
     }
     if ((t = e.target.closest('[data-day]'))) { V.mode = 'day'; V.date = new Date(+t.dataset.day); V.scroll = null; return render(); }
-    if ((t = e.target.closest('[data-add]'))) return addSheet();
+    if ((t = e.target.closest('[data-add]')) && !(App.calendar && App.calendar.readOnly)) return addSheet();
   }
 
   // Swipe left/right to change day (the only swipe gesture in the app)
@@ -258,7 +263,7 @@
       '<div class="evs-time num">' + (e.allDay ? 'All day' : App.fmt.range(e.start, e.end)) + '</div></div>' +
       '<div class="evs-body">' +
       (e.travel ? '<div class="evs-row evs-leave">' + App.icon('car', 28) + '<div><b>Leave by ' + App.fmt.time(App.leaveBy(e)) + '</b><span>' + e.travel + ' min drive in current traffic</span></div></div>' : '') +
-      (e.loc ? '<div class="evs-row">' + App.icon('pin', 28) + '<div><b>' + App.esc(e.loc) + '</b><span>Tap to send directions to phone</span></div></div>' : '') +
+      (e.loc ? '<div class="evs-row">' + App.icon('pin', 28) + '<div><b>' + App.esc(e.loc) + '</b>' + (e.source === 'google' ? '' : '<span>Tap to send directions to phone</span>') + '</div></div>' : '') +
       '<div class="evs-row">' + App.icon('person', 28) + '<div class="evs-people">' + (fam ? D.people : e.people.map(App.person)).map(function (x) {
         return '<span class="chip" style="' + App.pstyle(x) + '">' + App.avatar(x, 32) + x.name + '</span>';
       }).join('') + '</div></div>' +

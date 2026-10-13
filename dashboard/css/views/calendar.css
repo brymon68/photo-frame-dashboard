@@ -11,6 +11,7 @@
 .cal-title .serif { font-size: 34px; line-height: 1; white-space: nowrap; }
 .cal-head [data-today] { margin-right: auto; }
 .cal-body { flex: 1; min-height: 0; position: relative; }
+.cal-sync { flex: none; color: var(--mute); font-size: 12px; margin: 0 6px 8px; }
 
 /* ---- time grid (Today + 3 day) */
 .cal-day { height: 100%; display: flex; flex-direction: column; position: relative; }
@@ -52,6 +53,11 @@
 .lane.is-today { background: rgba(17, 17, 17, .03); }
 .lane-fam { position: absolute; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none; }
 .lane-fam .ev { pointer-events: auto; }
+.cal--connected .lane-fam { left: 0; }
+.cal--connected .cal-day .lanes,
+.cal--connected .cal-day .lanes-head,
+.cal--connected .cal-day .allday-grid { grid-template-columns: 1fr; }
+.cal--connected .cal-day .lanes-head { grid-template-columns: 64px 1fr; }
 
 /* event block */
 .ev {

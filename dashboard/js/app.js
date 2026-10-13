@@ -24,7 +24,7 @@
   App.dayStart = function (d) { var x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
   App.addDays = function (d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; };
   App.sameDay = function (a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); };
-  App.isNight = function () { var h = App.now().getHours(); return h >= 22 || h < 6; };
+  App.isNight = function () { var h = App.now().getHours(); return h >= 21 || h < 6; };
 
   var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -92,8 +92,10 @@
   App.events = function () {
     var list = D.events.slice();
     var today = App.dayStart(App.now());
-    if (App.calMode === 'busy') list = list.concat(D.busyExtras);
-    if (App.calMode === 'empty') list = list.filter(function (e) { return e.allDay || !App.sameDay(e.start, today); });
+    if (!(App.calendar && App.calendar.readOnly)) {
+      if (App.calMode === 'busy') list = list.concat(D.busyExtras);
+      if (App.calMode === 'empty') list = list.filter(function (e) { return e.allDay || !App.sameDay(e.start, today); });
+    }
     return list;
   };
   App.isFamily = function (e) { return e.people.length >= D.people.length; };
@@ -120,41 +122,6 @@
   };
   App.findEvent = function (id) {
     return App.events().filter(function (e) { return e.id === id; })[0];
-  };
-
-  // ------------------------------------------------------------ chores + weather helpers
-  App.currentRoutine = function () {
-    var h = App.now().getHours();
-    for (var i = 0; i < D.routines.length; i++) if (h >= D.routines[i].from && h < D.routines[i].to) return D.routines[i];
-    return D.routines[2];
-  };
-  App.weatherNow = function () {
-    var W = D.weather, h = App.now().getHours();
-    var rainAt = -1;
-    for (var i = h; i < 24; i++) if (W.p[i] >= 50) { rainAt = i; break; }
-    var summary, advice;
-    if (rainAt === h) {
-      var stop = h; while (stop < 24 && W.p[stop] >= 50) stop++;
-      summary = 'Rain until ' + App.fmt.hour(new Date(2000, 0, 1, stop));
-      advice = 'Umbrella weather';
-    } else if (rainAt > -1) {
-      summary = 'Rain from ' + App.fmt.hour(new Date(2000, 0, 1, rainAt));
-      var soccer = App.timedOn(App.now()).filter(function (e) { return /soccer/i.test(e.title) && e.start > App.now(); })[0];
-      advice = soccer ? 'Pack a rain jacket for soccer' : 'Grab a rain jacket';
-    } else {
-      summary = W.t[h] < 12 ? 'Clear and cool' : 'Dry all day';
-      advice = W.t[h] < 12 ? 'Jacket weather' : 'Light layers';
-    }
-    var labels = { sun: 'Sunny', moon: 'Clear', partly: 'Partly cloudy', cloud: 'Overcast', rain: 'Rain' };
-    return { temp: W.t[h], cond: W.c[h], label: labels[W.c[h]], hi: W.hi, lo: W.lo, summary: summary, advice: advice, hour: h };
-  };
-  App.hourly = function (count) {
-    var W = D.weather, h = App.now().getHours(), out = [];
-    for (var i = 0; i < count; i++) {
-      var x = (h + i) % 24;
-      out.push({ h: x, t: W.t[x], c: W.c[x], p: W.p[x], label: i === 0 ? 'Now' : ((x % 12 || 12) + (x >= 12 ? 'p' : 'a')) });
-    }
-    return out;
   };
 
   // ------------------------------------------------------------ router
@@ -255,9 +222,9 @@
   };
   App.closeSheet = function () {};
 
-  // Stage-local coordinates for an element's center (stage may be scaled on desktop)
+  // Stage-local coordinates; the logical height stays 800px as the stage widens.
   App.centerOf = function (el) {
-    var stage = $('#stage').getBoundingClientRect(), r = el.getBoundingClientRect(), k = stage.width / 1280;
+    var stage = $('#stage').getBoundingClientRect(), r = el.getBoundingClientRect(), k = stage.height / 800;
     return { x: (r.left + r.width / 2 - stage.left) / k, y: (r.top + r.height / 2 - stage.top) / k };
   };
 
@@ -286,6 +253,9 @@
     var stage = $('#stage');
     App.mode = m;
     stage.dataset.mode = m;
+    if (window.HomeHQ && typeof window.HomeHQ.setStandby === 'function') {
+      window.HomeHQ.setStandby(m === 'ambient' || m === 'night');
+    }
     App.emit('mode', m);
   };
 
@@ -306,10 +276,15 @@
   }
   App.resetIdle = function () { idleSec = 0; };
 
-  // ------------------------------------------------------------ stage scaling (desktop preview only)
+  // ------------------------------------------------------------ stage sizing
   function fit() {
     var s = Math.min(window.innerWidth / 1280, window.innerHeight / 800);
-    $('#stage').style.transform = Math.abs(s - 1) < 0.01 ? '' : 'scale(' + s + ')';
+    // Fill wider screens by giving the layout more room, keeping the height and type scale.
+    var width = window.innerWidth / s;
+    var stage = $('#stage');
+    stage.style.width = width + 'px';
+    stage.style.marginLeft = -width / 2 + 'px';
+    stage.style.transform = s === 1 ? '' : 'scale(' + s + ')';
   }
 
   // ------------------------------------------------------------ clock tick
@@ -327,7 +302,8 @@
 
   // ------------------------------------------------------------ boot
   App.start = function () {
-    App.setTime(15, 18); // demo default: a busy weekday afternoon
+    if (document.documentElement.hasAttribute('data-real-time')) App.setTime(null);
+    else App.setTime(15, 18); // demo default: a busy weekday afternoon
     fit();
     window.addEventListener('resize', fit);
     // Switch tabs the instant a finger lands (pointerdown), not on release. Keyboard "clicks"
