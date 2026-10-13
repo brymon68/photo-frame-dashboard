@@ -250,6 +250,14 @@
   var idleSec = 0;
   function onIdleTick() {
     idleSec++;
+    // Standby can span a schedule boundary or a network clock correction.
+    var night = App.isNight();
+    if (App.mode === 'ambient' || App.mode === 'night') {
+      var standby = night ? 'night' : 'ambient';
+      if (App.mode !== standby) App.setMode(standby);
+      return;
+    }
+    if (App.mode === 'nightdash' && !night) { App.setMode('day'); return; }
     var blocked = $('#takeover').classList.contains('is-open');
     if (App.mode === 'nightdash' && idleSec >= 20) { App.setMode('night'); return; }
     if (App.mode !== 'day' || blocked) return;
@@ -257,7 +265,7 @@
     if (idleSec >= App.idle.ambient) {
       App.closeSheet();
       App.go('home');
-      App.setMode(App.isNight() ? 'night' : 'ambient');
+      App.setMode(night ? 'night' : 'ambient');
     }
   }
   App.resetIdle = function () { idleSec = 0; };

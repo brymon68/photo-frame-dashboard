@@ -5,7 +5,7 @@ installed and selected on 2026-10-12. It uses the frame's existing Android firmw
 shipped `su`; setup installed an app and changed launcher/package settings.
 No firmware or raw partitions were rewritten.
 
-Home HQ 1.13 under `com.brymon68.homehq` uses the owner's brymon68 signing key.
+Home HQ 1.14 under `com.brymon68.homehq` uses the owner's brymon68 signing key.
 Calendar configuration, saved settings, and feed caches are in place.
 
 | Component | Installed setup |
@@ -13,7 +13,7 @@ Calendar configuration, saved settings, and feed caches are in place.
 | Frame | Pastigio FRAME156, Rockchip RK3326, 1920×1080 |
 | Android | 8.1.0, stock FrameO.DP105F.v2026010414 firmware |
 | WebView | 106.0.5249.126 |
-| Dashboard | Home HQ 1.13, `com.brymon68.homehq` |
+| Dashboard | Home HQ 1.14, `com.brymon68.homehq` |
 | Default Home | `com.brymon68.homehq/.Home`; reboot verification pending |
 | Clock | Device time, `America/Denver` |
 
@@ -63,8 +63,10 @@ reconnection. Keep wall power connected when removing the USB data cable.
   The Photos view and photo slideshow are absent.
 - After two minutes idle, standby shows Ambient during the day and Night from
   **21:00 to 06:00**. Both use a **5% window backlight override**. A tap restores
-  normal brightness; Night returns after another 20 seconds idle. The device's
-  saved brightness setting is unchanged.
+  normal brightness; Night returns after another 20 seconds idle during night hours.
+  Standby automatically switches at both schedule boundaries; an awake night
+  dashboard becomes the normal dashboard at 06:00. The device's saved brightness
+  setting is unchanged.
 - One shared Google family calendar is read-only and refreshes every five
   minutes. Albuquerque weather refreshes every 15 minutes in Fahrenheit/mph.
   Both retain saved data during outages and label it accordingly.

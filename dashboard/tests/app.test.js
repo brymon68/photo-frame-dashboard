@@ -8,17 +8,30 @@ const script = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 function fixture() {
   const elements = new Map(), standby = [];
   let now = +new Date('2026-10-12T15:18:00-06:00');
-  class Clock extends Date { static now() { return now; } }
+  class Clock extends Date {
+    constructor(...args) { super(...(args.length ? args : [now])); }
+    static now() { return now; }
+  }
+  let interval;
   function element(selector) {
-    if (!elements.has(selector)) elements.set(selector, { dataset: {}, classList: { toggle() {} } });
+    if (!elements.has(selector)) elements.set(selector, {
+      dataset: {}, style: {}, addEventListener() {},
+      classList: { toggle() {}, contains() { return false; } }
+    });
     return elements.get(selector);
   }
-  const location = { hash: '' }, window = { DATA: {}, HomeHQ: { setStandby: value => standby.push(value) } };
+  const location = { hash: '' }, window = {
+    DATA: {}, HomeHQ: { setStandby: value => standby.push(value) },
+    innerWidth: 1920, innerHeight: 1080, addEventListener() {}
+  };
   vm.runInNewContext(script, {
     window, location, Date: Clock,
     history: { replaceState: (_, __, hash) => { location.hash = hash; } },
-    document: { querySelector: element, querySelectorAll: () => [], addEventListener() {} },
-    setTimeout() {}, clearTimeout() {}
+    document: {
+      querySelector: element, querySelectorAll: () => [], addEventListener() {},
+      documentElement: { hasAttribute: () => true }
+    },
+    setTimeout() {}, clearTimeout() {}, setInterval(fn) { interval = fn; }
   });
   const App = window.App;
   function view(name, minutely = false) {
@@ -31,7 +44,12 @@ function fixture() {
     });
     return calls;
   }
-  return { App, view, element, standby, advance: ms => { now += ms; } };
+  return {
+    App, view, element, standby, advance: ms => { now += ms; },
+    start() { view('home'); App.on('mode', App.resetIdle); App.start(); },
+    tick(seconds = 1) { for (let i = 0; i < seconds; i++) { now += 1000; interval(); } },
+    clock(value) { now = +new Date(value); }
+  };
 }
 
 test('explicit rerenders refresh cached metadata so the next visit can resume', () => {
@@ -68,4 +86,46 @@ test('standby bridge dims only ambient/night and night starts at 9 PM', () => {
     assert.equal(f.element('#stage').dataset.mode, mode);
   }
   assert.deepEqual(f.standby, [true, false, true, false]);
+});
+
+test('existing standby follows both schedule boundaries without a touch', () => {
+  const f = fixture(); f.start();
+  f.clock('2026-10-12T20:59:58-06:00'); f.App.setMode('ambient');
+  f.tick(); assert.equal(f.App.mode, 'ambient');
+  f.tick(); assert.equal(f.App.mode, 'night');
+  f.clock('2026-10-13T05:59:58-06:00');
+  f.tick(); assert.equal(f.App.mode, 'night');
+  f.tick(); assert.equal(f.App.mode, 'ambient');
+  assert.ok(f.standby.every(Boolean), 'Schedule changes keep standby brightness');
+});
+
+test('night dashboard becomes day at dawn and uses the normal idle timeout', () => {
+  const f = fixture(); f.start();
+  f.clock('2026-10-13T05:59:59-06:00'); f.App.setMode('nightdash');
+  f.tick(); assert.equal(f.App.mode, 'day');
+  assert.equal(f.standby.at(-1), false);
+  f.tick(119); assert.equal(f.App.mode, 'day');
+  f.tick(); assert.equal(f.App.mode, 'ambient');
+});
+
+test('night wake still returns after 20 seconds, while active day stays awake', () => {
+  const f = fixture(); f.start();
+  f.clock('2026-10-12T22:00:00-06:00'); f.App.setMode('nightdash');
+  f.tick(19); assert.equal(f.App.mode, 'nightdash');
+  f.tick(); assert.equal(f.App.mode, 'night');
+  f.clock('2026-10-12T20:59:59-06:00'); f.App.setMode('day');
+  f.tick(); assert.equal(f.App.mode, 'day');
+  f.tick(118); assert.equal(f.App.mode, 'day');
+  f.tick(); assert.equal(f.App.mode, 'night');
+});
+
+test('standby recovers when the device clock jumps across the schedule', () => {
+  const f = fixture(); f.start();
+  f.clock('2026-10-12T23:00:00-06:00'); f.App.setMode('night');
+  f.clock('2026-10-13T09:37:00-06:00'); f.tick();
+  assert.equal(f.App.mode, 'ambient');
+  const transitions = f.standby.length;
+  f.tick(60); assert.equal(f.standby.length, transitions);
+  f.clock('2026-10-12T23:00:00-06:00'); f.tick();
+  assert.equal(f.App.mode, 'night');
 });

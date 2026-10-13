@@ -1,7 +1,7 @@
 # Home HQ kiosk on the Pastigio frame
 
 Home HQ packages the dashboard in a fullscreen Android WebView. This source
-builds **Home HQ 1.13, `com.brymon68.homehq`**, signed with the owner's key and
+builds **Home HQ 1.14, `com.brymon68.homehq`**, signed with the owner's key and
 installed as the frame's default Home app. Its navigation service is selected;
 reboot verification and native-menu/navigation-button acceptance have not been
 completed for the current installation. See the [current frame setup](../../docs/pastigio-frame156.md)
@@ -137,7 +137,10 @@ The selected navigation service is `com.brymon68.homehq/.NavigationService`.
 
 Standby starts after 120 seconds idle: Ambient by day, Night from 21:00 to 06:00.
 Both use 5% window brightness. Touch restores the device's normal brightness;
-Night returns after 20 seconds idle. Reload also restores normal brightness.
+Night returns after 20 seconds idle during night hours. Existing standby switches
+automatically at 21:00 and 06:00; an awake night dashboard becomes the normal
+dashboard at 06:00. Schedule checks also handle device clock corrections.
+Reload also restores normal brightness.
 The saved system brightness is unchanged.
 
 ## Calendar and weather

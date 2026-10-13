@@ -5,7 +5,7 @@ This repository maintains the Home HQ dashboard installed on a Pastigio FRAME156
 
 The frame runs its existing Android 8.1 firmware and WebView 106. **We replaced
 the default launcher with Home HQ; we did not replace Android or flash new
-firmware.** The installed app is Home HQ 1.13. Repository changes are
+firmware.** The installed app is Home HQ 1.14. Repository changes are
 not installed automatically.
 
 The frame uses `com.brymon68.homehq`, signed with the owner's brymon68 key, as
@@ -84,7 +84,7 @@ certificate are separate parts of an Android app's identity:
 
 | Property | Installed app |
 | --- | --- |
-| Version | 1.13 |
+| Version | 1.14 |
 | Package | `com.brymon68.homehq` |
 | Certificate subject | `CN=brymon68, O=Home HQ` |
 | Status | Current default launcher and navigation service |
