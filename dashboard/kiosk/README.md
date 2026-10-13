@@ -156,3 +156,16 @@ so midnight does not wrap into yesterday's forecast. Photos and slideshows are
 removed; the idle display keeps the clock, weather, and next appointment.
 
 Run calendar and weather checks from `dashboard/` with `npm test`.
+
+Native HTTPS/cache contracts can also run on the host with JDK 17 and the Gson
+JAR bundled in Android command-line tools:
+
+```sh
+python3 kiosk/tests/test-feeds.py --java-home /path/to/jdk17 --gson-jar /path/to/gson.jar
+```
+
+These checks use temporary files, fake HTTPS connections, and small Android API
+adapters; they never contact a frame or a feed. They cover validation, size limits,
+refresh/reuse timing, saved-data fallback, response headers, and storage failures.
+Pass `--source-dir /path/to/old/kiosk/src/com/wesbos/homehq` to check an older
+implementation against the same contracts.

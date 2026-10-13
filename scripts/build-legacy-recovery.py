@@ -18,21 +18,14 @@ import subprocess
 import sys
 import zlib
 
+from android_image import parse_recovery_image, require, sha
+
 CANDIDATE_SHA = 'e88e7e4a7a37a84cb898ae2b4cb4f4ed9d515ccb4a5a46aad1302347a0db731e'
 KERNEL_SHA = '61f8ae942299bdfeed281bed05be6cd1062fadfc84053d380512bde713563266'
 DOWNLOAD_BASE = 0x00c00800  # Confirmed from installed U-Boot callback disassembly.
 KERNEL_LOAD = 0x06080000
 MAX_DOWNLOAD = 0x04000000
 WORKSPACE = 0x4000
-
-
-def require(condition, message):
-    if not condition:
-        raise ValueError(message)
-
-
-def sha(data):
-    return hashlib.sha256(data).hexdigest()
 
 
 def align4(n):
@@ -74,9 +67,7 @@ def main():
     args = parser.parse_args()
     candidate=args.candidate.read_bytes()
     require(sha(candidate)==CANDIDATE_SHA,'Unexpected AP6256 diagnostic source')
-    spec=importlib.util.spec_from_file_location('recovery_builder',Path(__file__).with_name('build-diagnostic-recovery.py'))
-    recovery=importlib.util.module_from_spec(spec);spec.loader.exec_module(recovery)
-    components,_=recovery.parse_image(candidate)
+    components,_=parse_recovery_image(candidate)
     kernel,ramdisk=components['kernel'],components['ramdisk']
     require(sha(kernel)==KERNEL_SHA,'Stock kernel mismatch')
     require(kernel[56:60]==b'ARM\x64','Missing ARM64 Image header')

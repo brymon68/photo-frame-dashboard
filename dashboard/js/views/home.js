@@ -105,15 +105,13 @@
       '<div class="h-st-row">' + App.icon('thermo', 24) + '<b class="num">' + D.climate.current + '°</b><span>inside</span></div>';
   }
 
-  function paint() {
-    var el = V.el, laneBox = el.querySelector('.h-lanes');
-    el.querySelector('.h-clock').innerHTML = clock();
-    el.querySelector('.h-weather').innerHTML = weather();
-    el.querySelector('.h-hero-slot').innerHTML = hero();
-    laneBox.innerHTML = lanes();
-    laneBox.style.gridTemplateColumns = 'repeat(' + D.people.length + ', 1fr)';
-    el.querySelector('.h-shop').innerHTML = shopping();
-    el.querySelector('.h-status').innerHTML = status();
+  var parts = { clock: clock, weather: weather, 'hero-slot': hero, lanes: lanes, shop: shopping, status: status };
+  function paint(names) {
+    if (!V.el || !V.el.firstChild) return;
+    if (!names) V.el.querySelector('.h-lanes').style.gridTemplateColumns = 'repeat(' + D.people.length + ', 1fr)';
+    (names || Object.keys(parts)).forEach(function (name) {
+      V.el.querySelector('.h-' + name).innerHTML = parts[name]();
+    });
   }
 
   App.register('home', {
@@ -140,11 +138,8 @@
   });
   // Every minute: just the clock and next-up countdown (cheap, even while hidden). Weather on the hour.
   App.on('minute', function (n) {
-    if (!V.el || !V.el.firstChild) return;
-    V.el.querySelector('.h-clock').innerHTML = clock();
-    V.el.querySelector('.h-hero-slot').innerHTML = hero();
-    if (n.getMinutes() === 0) { V.el.querySelector('.h-weather').innerHTML = weather(); V.el.querySelector('.h-lanes').innerHTML = lanes(); }
+    paint(n.getMinutes() === 0 ? ['clock', 'hero-slot', 'weather', 'lanes'] : ['clock', 'hero-slot']);
   });
-  App.on('weather', function () { if (V.el && V.el.firstChild) V.el.querySelector('.h-weather').innerHTML = weather(); });
+  App.on('weather', function () { paint(['weather']); });
   App.on('data', function () { if (App.current === 'home') paint(); });
 })();

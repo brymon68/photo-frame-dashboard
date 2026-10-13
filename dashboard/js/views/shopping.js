@@ -45,6 +45,9 @@
         '</div>' : '');
   }
 
+  function suggestion(name, detail, isNew) {
+    return '<button class="s-ac-row' + (isNew ? ' s-ac-row--new' : '') + '" data-add="' + App.esc(name) + '"><b>' + (isNew ? 'Add “' + App.esc(name) + '”' : App.esc(name)) + '</b><span class="label">' + detail + '</span>' + App.icon('plus', 26) + '</button>';
+  }
   function suggestHTML() {
     var q = V.query.trim().toLowerCase();
     if (q) {
@@ -53,8 +56,8 @@
       var exact = matches.some(function (m) { return m[0].toLowerCase() === q; });
       return '<div class="label">Suggestions</div><div class="s-ac">' + matches.map(function (m) {
         var on = find(m[0], false);
-        return '<button class="s-ac-row" data-add="' + App.esc(m[0]) + '"><b>' + App.esc(m[0]) + '</b><span class="label">' + (on ? 'On list · ×' + on.qty : m[1]) + '</span>' + App.icon('plus', 26) + '</button>';
-      }).join('') + (exact ? '' : '<button class="s-ac-row s-ac-row--new" data-add="' + App.esc(V.query.trim()) + '"><b>Add “' + App.esc(V.query.trim()) + '”</b><span class="label">' + categorize(V.query) + '</span>' + App.icon('plus', 26) + '</button>') + '</div>';
+        return suggestion(m[0], on ? 'On list · ×' + on.qty : m[1]);
+      }).join('') + (exact ? '' : suggestion(V.query.trim(), categorize(V.query), true)) + '</div>';
     }
     return '<div class="label">Usuals · tap to add</div><div class="s-usuals">' + D.usuals.map(usualTile).join('') + '</div>';
   }

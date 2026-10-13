@@ -98,6 +98,7 @@ function fixture(scale = 1) {
   view.show(root);
   return {
     App, data, root, timers, toasts,
+    show: () => view.show(root),
     tile: (id, box = root.parts.get('.hc-rooms')) => box.querySelector('[data-dev="' + id + '"]'),
     device: id => data.devices.find(d => d.id === id),
     click: (selector, dataset) => root.fire('click', { target: { closest: match => match === selector ? { dataset } : null } }),
@@ -162,6 +163,25 @@ test('cancelled light drags restore the tile without committing and remain usabl
   assert.notEqual(f.tile('light'), old);
   drag(f.tile('light'), 60);
   assert.equal(f.device('light').level, 70);
+});
+
+test('selective paints preserve active drags and full paints retain room scroll', () => {
+  const f = fixture(), tile = f.tile('light'), rooms = f.root.parts.get('.hc-rooms');
+  rooms.scrollTop = 137;
+  tile.fire('pointerdown', { clientX: 100 });
+  tile.fire('pointermove', { clientX: 150 });
+  f.click('[data-temp]', { temp: '0.5' });
+  f.click('[data-play]', {});
+  drag(f.tile('blind'), 20);
+  assert.equal(f.tile('light'), tile);
+  assert.equal(tile.style['--lvl'], '65%');
+  assert.equal(rooms.scrollTop, 137);
+  tile.fire('pointerup');
+  assert.equal(f.device('light').level, 65);
+  f.show();
+  assert.equal(rooms.scrollTop, 137);
+  drag(f.tile('light'), 20);
+  assert.equal(f.device('light').level, 75);
 });
 
 test('sheet sliders update both copies and bulk light undo restores state', () => {

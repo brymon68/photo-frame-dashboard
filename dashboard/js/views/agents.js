@@ -13,6 +13,7 @@
     return Math.floor(min / 1440) + 'd ' + Math.floor((min % 1440) / 60) + 'h';
   }
   function fmtTokens(m) { return m >= 10 ? Math.round(m) + 'M' : m.toFixed(1) + 'M'; }
+  function stat(value, label) { return '<div><span class="num">' + value + '</span><small>' + label + '</small></div>'; }
 
   function meter(m, ai, mi) {
     var p = paceOf(m);
@@ -43,8 +44,8 @@
       '<header class="ag-head"><div class="ag-id"><i class="ag-swatch"></i><b>' + a.name + '</b><span class="ag-plan">' + a.plan + '</span></div>' + status + '</header>' +
       (a.incident ? '<div class="ag-incident">' + App.icon('bolt', 16) + a.incident + '</div>' : hot ? '<div class="ag-incident ag-incident--hot">' + App.icon('clock', 16) + 'Near the session limit</div>' : '') +
       a.meters.map(function (m, mi) { return meter(m, ai, mi); }).join('') +
-      '<footer class="ag-foot"><div><span class="num">' + fmtTokens(a.tokens) + '</span><small>tokens today</small></div>' +
-      '<div><span class="num">' + (a.cost ? '$' + a.cost.toFixed(2) : 'Incl.') + '</span><small>' + (a.cost ? 'API cost' : 'in plan') + '</small></div>' +
+      '<footer class="ag-foot">' + stat(fmtTokens(a.tokens), 'tokens today') +
+      stat(a.cost ? '$' + a.cost.toFixed(2) : 'Incl.', a.cost ? 'API cost' : 'in plan') +
       spark(a.week) + '</footer>' +
       '</section>';
   }
@@ -65,8 +66,7 @@
     }).join('');
     return '<section class="ag-card ag-sum">' +
       '<header class="ag-head"><div class="ag-id"><b>All agents</b><span class="ag-plan">Last 7 days</span></div></header>' +
-      '<div class="ag-sum-stats"><div><span class="num">' + fmtTokens(week) + '</span><small>tokens</small></div>' +
-      '<div><span class="num">$' + cost.toFixed(0) + '</span><small>API cost today</small></div></div>' +
+      '<div class="ag-sum-stats">' + stat(fmtTokens(week), 'tokens') + stat('$' + cost.toFixed(0), 'API cost today') + '</div>' +
       '<div class="ag-chart">' + bars + '</div>' +
       '<div class="ag-legend">' + D.agents.map(function (a) { return '<span style="' + pstyle(a) + '"><i></i>' + a.name + '</span>'; }).join('') + '</div>' +
       '</section>';

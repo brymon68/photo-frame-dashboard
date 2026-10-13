@@ -8,13 +8,15 @@ An unreferenced partition tail is intentionally omitted, not silently preserved.
 """
 import argparse
 import gzip
-import hashlib
 import json
 import os
 from pathlib import Path
 import struct
 import subprocess
 import sys
+
+from android_image import (align, cpio_records, parse_recovery_image as parse_image,
+                           require, sha)
 
 SOURCE_SHA256 = 'c151881e17a158362968267cc3a591858e300a0dfc0fdd587ab129ce44f1af13'
 DISK_SHA256 = '040f0a6f2d3a2b8b8da85069bedf1bcb37af26532ed2b7606edc8abb000eda78'
@@ -36,67 +38,14 @@ AP6256_ASSETS = {
 }
 
 
-def require(condition, message):
-    if not condition:
-        raise ValueError(message)
-
-
-def sha(data):
-    return hashlib.sha256(data).hexdigest()
-
-
-def align(number, page):
-    return (number + page - 1) // page * page
-
-
-def parse_image(data):
-    require(len(data) >= 1660 and data[:8] == b'ANDROID!', 'Invalid Android header')
-    page, version = struct.unpack_from('<II', data, 36)
-    require(page == 2048 and version == 2, 'Only the documented 2048-byte/v2 image is supported')
-    require(struct.unpack_from('<I', data, 1644)[0] == 1660, 'Unexpected v2 header size')
-    sizes = dict(kernel=struct.unpack_from('<I', data, 8)[0],
-                 ramdisk=struct.unpack_from('<I', data, 16)[0],
-                 second=struct.unpack_from('<I', data, 24)[0],
-                 recovery_dtbo=struct.unpack_from('<I', data, 1632)[0],
-                 dtb=struct.unpack_from('<I', data, 1648)[0])
-    components, offset = {}, page
-    for name, size in sizes.items():
-        if name == 'recovery_dtbo':
-            require(struct.unpack_from('<Q', data, 1636)[0] == offset,
-                    'Recovery DTBO offset differs from sequential layout')
-        require(size > 0 and offset+size <= len(data), f'Invalid component bounds: {name}')
-        components[name] = data[offset:offset+size]
-        offset += align(size, page)
-    # Independent Android v2 image-ID calculation.
-    digest = hashlib.sha1()
-    for name in ['kernel', 'ramdisk', 'second']:
-        digest.update(components[name])
-        digest.update(struct.pack('<I', sizes[name]))
-    digest.update(components['recovery_dtbo'])
-    digest.update(struct.pack('<I', sizes['recovery_dtbo']))
-    digest.update(components['dtb'])
-    digest.update(struct.pack('<I', sizes['dtb']))
-    require(data[576:596] == digest.digest(), 'Android image ID mismatch')
-    return components, offset
-
-
 def patch_cpio(cpio):
     require(sha(cpio) == CPIO_SHA256, 'Unrecognized stock recovery CPIO')
     offset, matches = 0, []
-    while offset < len(cpio):
-        require(cpio[offset:offset+6] == b'070701', 'Unsupported CPIO header')
-        fields = [int(cpio[offset+6+i*8:offset+14+i*8], 16) for i in range(13)]
-        size, namesize = fields[6], fields[11]
-        offset += 110
-        require(namesize > 0 and offset+namesize <= len(cpio), 'CPIO filename exceeds bounds')
-        name = cpio[offset:offset+namesize-1]
-        offset = align(offset+namesize, 4)
-        if name == b'TRAILER!!!':
-            break
-        require(offset+size <= len(cpio), 'CPIO content exceeds bounds')
-        if name in (b'prop.default', b'./prop.default'):
-            matches.append((offset, size))
-        offset = align(offset+size, 4)
+    for name, record, content in cpio_records(cpio):
+        if name in ('prop.default', './prop.default'):
+            content_start = offset + len(record) - align(len(content), 4)
+            matches.append((content_start, len(content)))
+        offset += len(record)
     require(len(matches) == 1, 'Expected exactly one /prop.default entry')
     offset, size = matches[0]
     props = cpio[offset:offset+size]
@@ -120,28 +69,6 @@ def patch_cpio(cpio):
         reverted[i] = cpio[i]
     require(reverted == cpio, 'Unexpected CPIO bytes changed')
     return bytes(patched), changes
-
-
-def cpio_records(cpio):
-    """Yield unchanged complete newc records, including the trailer."""
-    offset = 0
-    while offset < len(cpio):
-        start = offset
-        require(cpio[offset:offset+6] == b'070701', 'Unsupported CPIO record')
-        fields = [int(cpio[offset+6+i*8:offset+14+i*8], 16) for i in range(13)]
-        size, namesize = fields[6], fields[11]
-        offset += 110
-        require(namesize > 0 and offset+namesize <= len(cpio), 'Invalid CPIO name bounds')
-        name = cpio[offset:offset+namesize-1].decode('utf-8')
-        offset = align(offset+namesize, 4)
-        content = cpio[offset:offset+size]
-        require(len(content) == size, 'Truncated CPIO record')
-        offset = align(offset+size, 4)
-        yield name, cpio[start:offset], content
-        if name == 'TRAILER!!!':
-            require(not any(cpio[offset:]), 'Unexpected nonzero CPIO tail')
-            return
-    raise ValueError('Missing CPIO trailer')
 
 
 def trim_pcba_modules(cpio, broadcom_firmware=False, wifi_profile='ap6256'):
