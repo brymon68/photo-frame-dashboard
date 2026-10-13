@@ -21,10 +21,10 @@ window.DATA = (function () {
   var ALL = ['alex', 'jordan', 'maya', 'otto'];
 
   var people = [
-    { id: 'alex', name: 'Wes', color: '#2D5BFF', rgb: '45 91 255', ink: '#FFFFFF', home: false, status: 'Driving home', eta: 12 },
-    { id: 'jordan', name: 'Claudia', color: '#E4007C', rgb: '228 0 124', ink: '#FFFFFF', home: false, status: 'At the office' },
-    { id: 'maya', name: 'Buzzsaw', age: 10, color: '#00A36C', rgb: '0 163 108', ink: '#FFFFFF', home: true, status: 'Home' },
-    { id: 'otto', name: 'Skidmark', age: 6, color: '#FFB000', rgb: '255 176 0', ink: '#111111', home: true, status: 'Home' }
+    { id: 'alex', name: 'Wes', color: '#2D5BFF', rgb: '45 91 255', ink: '#FFFFFF', home: false },
+    { id: 'jordan', name: 'Claudia', color: '#E4007C', rgb: '228 0 124', ink: '#FFFFFF', home: false },
+    { id: 'maya', name: 'Buzzsaw', color: '#00A36C', rgb: '0 163 108', ink: '#FFFFFF', home: true },
+    { id: 'otto', name: 'Skidmark', color: '#FFB000', rgb: '255 176 0', ink: '#111111', home: true }
   ];
   var family = { id: 'family', name: 'Family', color: '#111111', rgb: '17 17 17', ink: '#FFFFFF' };
 
@@ -81,7 +81,7 @@ window.DATA = (function () {
   // Background recurring events so the month view has texture
   for (var d = -40; d <= 45; d++) {
     if (d >= 0 && d <= 6) continue;
-    var dow = new Date(at(d, '00:00')).getDay();
+    var dow = at(d, '00:00').getDay();
     if (dow === 1) events.push(ev(d, '15:45', '16:30', 'Piano lesson', ['otto']));
     if (dow === 2 || dow === 4) events.push(ev(d, '16:30', '18:00', 'Soccer practice', ['maya']));
     if (dow === 3) events.push(ev(d, '19:00', '20:00', 'Yoga', ['jordan']));
@@ -163,8 +163,8 @@ window.DATA = (function () {
     { id: 'y-back', room: 'yard', type: 'lock', name: 'Back Door', locked: true },
     { id: 'y-flood', room: 'yard', type: 'light', name: 'Floodlight', on: false, level: 100 }
   ];
-  var climate = { current: 20.5, set: 21.5, mode: 'heat', humidity: 42, outside: 14 };
-  var media = { room: 'Kitchen', title: 'Harvest Moon', artist: 'Neil Young', playing: true, volume: 35, seed: 'harvest-vinyl' };
+  var climate = { current: 20.5, set: 21.5, mode: 'heat', humidity: 42 };
+  var media = { room: 'Kitchen', title: 'Harvest Moon', artist: 'Neil Young', playing: true, seed: 'harvest-vinyl' };
   var cameras = [
     { id: 'c-front', name: 'Front Porch', seed: 'porch-steps' },
     { id: 'c-drive', name: 'Driveway', seed: 'driveway-maple' },

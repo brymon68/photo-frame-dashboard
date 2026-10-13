@@ -43,8 +43,7 @@
 
   App.on('mode', function (m) {
     clearInterval(shiftTimer);
-    if (m === 'ambient') { paint(); shiftTimer = setInterval(pixelShift, 60000); }
-    if (m === 'night') { paint(); shiftTimer = setInterval(pixelShift, 60000); }
+    if (m === 'ambient' || m === 'night') { paint(); shiftTimer = setInterval(pixelShift, 60000); }
     App.resetIdle();
   });
   App.on('minute', paint);

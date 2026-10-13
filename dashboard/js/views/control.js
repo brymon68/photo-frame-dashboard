@@ -4,7 +4,7 @@
   var D = window.DATA;
   var V = { el: null, pending: {}, scene: null, camTimer: null, camAge: 4 };
 
-  function dev(id) { return D.devices.filter(function (d) { return d.id === id; })[0]; }
+  function dev(id) { return D.devices.find(function (d) { return d.id === id; }); }
 
   // Optimistic device update: flip immediately, confirm (or revert) shortly after.
   App.setDevice = function (id, patch, opts) {
@@ -82,7 +82,6 @@
   function rooms() {
     return D.rooms.map(function (r) {
       var list = D.devices.filter(function (d) { return d.room === r.id; });
-      var on = list.filter(function (d) { return d.type === 'light' && d.on; }).length;
       return '<section class="room"><div class="room-h"><h3 class="serif">' + r.name + '</h3><span class="label" data-room-count="' + r.id + '">' + roomCount(r.id) + '</span></div>' +
         '<div class="tiles">' + list.map(tile).join('') + '</div></section>';
     }).join('');
@@ -187,19 +186,17 @@
 
   function bindTiles(root) { App.$$('[data-dev]', root).forEach(bindTile); }
   function bindTile(t) {
-    (function () {
-      var d = dev(t.dataset.dev);
-      if (d.type === 'light' || d.type === 'blind') sliderTile(t, d);
-      if (d.type === 'lock') {
-        App.hold(t, 1000, {
-          enabled: function () { return d.locked; },
-          done: function () { V.lastHold = Date.now(); App.setDevice(d.id, { locked: false }); App.toast('<b>' + d.name + '</b> unlocked', { icon: 'unlock' }); },
-          cancel: function () { App.toast('Hold for a second to unlock <b>' + d.name + '</b>', { icon: 'lock', ms: 2200 }); }
-        });
-        t.addEventListener('click', function () { if (!d.locked && Date.now() - (V.lastHold || 0) > 800) App.setDevice(d.id, { locked: true }); });
-      }
-      if (d.type === 'garage') t.addEventListener('click', function () { App.openGarageSheet(); });
-    })();
+    var d = dev(t.dataset.dev);
+    if (d.type === 'light' || d.type === 'blind') sliderTile(t, d);
+    if (d.type === 'lock') {
+      App.hold(t, 1000, {
+        enabled: function () { return d.locked; },
+        done: function () { V.lastHold = Date.now(); App.setDevice(d.id, { locked: false }); App.toast('<b>' + d.name + '</b> unlocked', { icon: 'unlock' }); },
+        cancel: function () { App.toast('Hold for a second to unlock <b>' + d.name + '</b>', { icon: 'lock', ms: 2200 }); }
+      });
+      t.addEventListener('click', function () { if (!d.locked && Date.now() - (V.lastHold || 0) > 800) App.setDevice(d.id, { locked: true }); });
+    }
+    if (d.type === 'garage') t.addEventListener('click', function () { App.openGarageSheet(); });
   }
 
   // Slide-to-confirm for the garage
@@ -210,31 +207,37 @@
       '<div class="slide-confirm"><span class="sc-label">Slide to ' + (opening ? 'open' : 'close') + ' →</span><span class="sc-fill"></span><span class="sc-knob">' + App.icon('garage', 30) + '</span></div></div>', {
       onMount: function (s, close) {
         var track = s.querySelector('.slide-confirm'), knob = s.querySelector('.sc-knob'), fill = s.querySelector('.sc-fill');
-        var sx = null, max;
+        var sx = null, max, x = null, limit;
+        function reset() {
+          sx = null; x = null;
+          knob.style.transform = ''; fill.style.width = '';
+        }
         knob.addEventListener('pointerdown', function (e) {
+          reset();
           sx = e.clientX; max = track.getBoundingClientRect().width - knob.getBoundingClientRect().width - 8;
           knob.setPointerCapture(e.pointerId);
         });
         knob.addEventListener('pointermove', function (e) {
           if (sx == null) return;
           var k = App.$('#stage').getBoundingClientRect().height / 800;
-          var x = Math.max(0, Math.min(max / k, (e.clientX - sx) / k));
+          limit = max / k;
+          x = Math.max(0, Math.min(limit, (e.clientX - sx) / k));
           knob.style.transform = 'translateX(' + x + 'px)';
           fill.style.width = (x + 76) + 'px';
-          knob._x = x; knob._max = max / k;
         });
         knob.addEventListener('pointerup', function () {
           if (sx == null) return;
           sx = null;
 
-          if (knob._x >= knob._max - 6) {
+          if (x !== null && x >= limit - 6) {
             close();
             g.state = opening ? 'opening' : 'closing';
             V.scene = null;
             changed(['g-door']);
             setTimeout(function () { g.state = opening ? 'open' : 'closed'; changed(['g-door']); App.toast('Garage ' + g.state, { icon: 'garage', ms: 2500 }); }, 4000);
-          } else { knob.style.transform = ''; fill.style.width = ''; }
+          } else reset();
         });
+        knob.addEventListener('pointercancel', reset);
       }
     });
   };
@@ -274,7 +277,7 @@
   }
 
   function applyScene(id) {
-    var s = D.scenes.filter(function (x) { return x.id === id; })[0];
+    var s = D.scenes.find(function (x) { return x.id === id; });
     var snapshot = D.devices.map(function (d) { return Object.assign({}, d); });
     var prevScene = V.scene;
     Object.keys(s.set).forEach(function (k) {
@@ -285,11 +288,8 @@
     });
     if (id === 'away' || id === 'night') D.devices.forEach(function (d) { if (d.type === 'lock') d.locked = true; });
     V.scene = id;
-    function diff() {
-      return snapshot.filter(function (o) { var d = dev(o.id); return o.on !== d.on || o.level !== d.level || o.pos !== d.pos || o.locked !== d.locked; })
-        .map(function (o) { return o.id; });
-    }
-    var ids = diff();
+    var ids = snapshot.filter(function (o) { var d = dev(o.id); return o.on !== d.on || o.level !== d.level || o.pos !== d.pos || o.locked !== d.locked; })
+      .map(function (o) { return o.id; });
     paintPart('.hc-scenes', scenes());
     changed(ids);
     App.toast('<b>' + s.name + '</b> scene on', {
@@ -318,7 +318,7 @@
       return climateChanged();
     }
     if ((t = e.target.closest('[data-tmode]'))) { D.climate.mode = t.dataset.tmode; return climateChanged(); }
-    if ((t = e.target.closest('[data-cam]'))) return App.cameraSheet(D.cameras.filter(function (c) { return c.id === t.dataset.cam; })[0]);
+    if ((t = e.target.closest('[data-cam]'))) return App.cameraSheet(D.cameras.find(function (c) { return c.id === t.dataset.cam; }));
     if ((t = e.target.closest('[data-play]'))) { D.media.playing = !D.media.playing; paintPart('.hc-media', media()); paintPart('.hc-sum', summary()); }
   }
   function climateChanged() { paintPart('.hc-climate', climate()); paintPart('.hc-sum', summary()); App.emit('data'); }

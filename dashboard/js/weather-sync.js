@@ -3,7 +3,8 @@ import { WEATHER_URL, parseWeather, currentWeather, hourlyWeather } from './weat
 const App = window.App, KEY = 'hq-albuquerque-weather-v1', INTERVAL = 15 * 60 * 1000;
 const native = location.origin === 'https://appassets.androidplatform.net';
 let forecast = null, busy = false, lastAttempt = 0, clockDay = '', refreshAfterClockChange = false;
-const state = App.weather = { updated: 0, stale: false, error: false, loading: true };
+const state = App.weather = { updated: 0, stale: false, error: false };
+const updatedFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Denver', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 App.weatherNow = function () {
   const weather = currentWeather(forecast, App.now());
   if (!forecast && state.error) weather.label = 'Weather unavailable';
@@ -13,7 +14,7 @@ App.hourly = count => hourlyWeather(forecast, App.now(), count);
 state.label = function () {
   if (!forecast) return state.error ? 'Weather unavailable · retrying' : 'Loading weather…';
   const d = new Date(state.updated);
-  const when = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Denver', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d);
+  const when = updatedFormat.format(d);
   const old = Math.abs(Date.now() - state.updated) > INTERVAL * 2;
   return (state.stale || state.error || old ? 'Saved weather · ' : 'Updated ') + when;
 };
@@ -34,7 +35,7 @@ state.refresh = async function () {
     try { localStorage.setItem(KEY, JSON.stringify({ data, updated })); } catch (e) { /* Native cache also persists. */ }
   } catch (e) { state.error = true; state.stale = !!forecast; }
   finally {
-    clearTimeout(timeout); busy = false; state.loading = false; paint();
+    clearTimeout(timeout); busy = false; paint();
     if (refreshAfterClockChange) { refreshAfterClockChange = false; state.refresh(); }
   }
 };

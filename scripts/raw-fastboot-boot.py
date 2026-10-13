@@ -6,7 +6,6 @@ import argparse
 import ctypes as C
 import hashlib
 from pathlib import Path
-import struct
 import sys
 
 EXPECTED_SHA='d6aac2f324840b0ef5ef66bcd110b9dc5e86309d50d0b94890b3d0ad5b8b9f96'

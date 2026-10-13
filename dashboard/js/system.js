@@ -26,7 +26,6 @@
     el.classList.remove('is-open');
     el.innerHTML = '';
   }
-  App.closeTakeover = closeTakeover;
 
   var doorbellTimer;
   App.doorbell = function () {
@@ -181,7 +180,7 @@
       if (k === 'n') App.setMode('night');
       if (k === 'escape') { closeDemo(); App.closeSheet(); }
       var views = ['home', 'calendar', 'shopping', 'control', 'agents'];
-      if (k >= '1' && k <= '7') App.go(views[+k - 1]);
+      if (k >= '1' && k <= String(views.length)) App.go(views[+k - 1]);
     });
   });
 })();

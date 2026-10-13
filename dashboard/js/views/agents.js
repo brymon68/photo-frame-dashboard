@@ -15,17 +15,14 @@
   function fmtTokens(m) { return m >= 10 ? Math.round(m) + 'M' : m.toFixed(1) + 'M'; }
 
   function meter(m, ai, mi) {
-    var left = minsLeft(m);
-    var pace = Math.round((1 - left / m.win) * 100); // where even usage would be right now
-    var diff = m.used - pace;
+    var p = paceOf(m);
     var hot = m.used >= 85;
-    var paceText = Math.abs(diff) < 3 ? 'On pace' : diff > 0 ? diff + '% over pace' : -diff + '% under pace';
     return '<div class="ag-meter' + (hot ? ' is-hot' : '') + '">' +
       '<div class="ag-meter-top"><span class="ag-label">' + m.label + '</span>' +
       '<span class="ag-pct num">' + m.used + '<small>%</small></span></div>' +
-      '<div class="ag-bar"><i style="width:' + m.used + '%"></i><em data-pace-mark style="left:' + pace + '%" title="Even pace"></em></div>' +
-      '<div class="ag-meter-foot" data-meter="' + ai + ',' + mi + '"><span>' + (m.detail ? m.detail + ' · ' : '') + 'Resets in <b data-reset>' + fmtLeft(left) + '</b></span>' +
-      '<span class="ag-pace' + (diff >= 3 ? ' is-over' : '') + '" data-pace>' + paceText + '</span></div>' +
+      '<div class="ag-bar"><i style="width:' + m.used + '%"></i><em data-pace-mark style="left:' + p.pace + '%" title="Even pace"></em></div>' +
+      '<div class="ag-meter-foot" data-meter="' + ai + ',' + mi + '"><span>' + (m.detail ? m.detail + ' · ' : '') + 'Resets in <b data-reset>' + fmtLeft(p.left) + '</b></span>' +
+      '<span class="ag-pace' + (p.diff >= 3 ? ' is-over' : '') + '" data-pace>' + p.text + '</span></div>' +
       '</div>';
   }
 
@@ -37,7 +34,7 @@
       '<polyline points="' + pts.join(' ') + '"/><circle cx="' + last[0] + '" cy="' + last[1] + '" r="3.5"/></svg>';
   }
 
-  function card(a) {
+  function card(a, ai) {
     var hot = a.meters.some(function (m) { return m.used >= 85; });
     var status = a.status === 'ok'
       ? '<span class="ag-status"><i></i>Operational</span>'
@@ -45,7 +42,7 @@
     return '<section class="ag-card" style="' + pstyle(a) + '">' +
       '<header class="ag-head"><div class="ag-id"><i class="ag-swatch"></i><b>' + a.name + '</b><span class="ag-plan">' + a.plan + '</span></div>' + status + '</header>' +
       (a.incident ? '<div class="ag-incident">' + App.icon('bolt', 16) + a.incident + '</div>' : hot ? '<div class="ag-incident ag-incident--hot">' + App.icon('clock', 16) + 'Near the session limit</div>' : '') +
-      a.meters.map(function (m, mi) { return meter(m, D.agents.indexOf(a), mi); }).join('') +
+      a.meters.map(function (m, mi) { return meter(m, ai, mi); }).join('') +
       '<footer class="ag-foot"><div><span class="num">' + fmtTokens(a.tokens) + '</span><small>tokens today</small></div>' +
       '<div><span class="num">' + (a.cost ? '$' + a.cost.toFixed(2) : 'Incl.') + '</span><small>' + (a.cost ? 'API cost' : 'in plan') + '</small></div>' +
       spark(a.week) + '</footer>' +

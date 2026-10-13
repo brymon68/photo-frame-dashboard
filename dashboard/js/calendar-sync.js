@@ -5,7 +5,7 @@ const KEY = 'hq-google-calendar-v1';
 const INTERVAL = 5 * 60 * 1000;
 const ENDPOINT = './calendar/';
 let calendar, rangeStart, rangeEnd, busy = false, text = '', clockDay = 0, refreshAfterClockChange = false;
-const state = App.calendar = { readOnly: false, updated: 0, stale: false, error: false, loading: false };
+const state = App.calendar = { readOnly: false, updated: 0, stale: false, error: false };
 
 function paint() {
   App.emit('data');
@@ -16,13 +16,17 @@ function windowAround(date) {
   return { start: App.addDays(App.dayStart(date), -62), end: App.addDays(App.dayStart(date), 400) };
 }
 
+function applyRange(parsed, start, end) {
+  const events = expandCalendar(parsed, start, end, D.ALL);
+  rangeStart = start; rangeEnd = end; D.events = events;
+}
+
 function apply(source, updated, stale) {
   const parsed = parseCalendar(source);
   const range = rangeStart ? { start: rangeStart, end: rangeEnd } : windowAround(App.now());
-  const events = expandCalendar(parsed, range.start, range.end, D.ALL);
-  calendar = parsed; text = source; rangeStart = range.start; rangeEnd = range.end;
-  D.events = events;
-  state.updated = updated; state.stale = stale; state.error = false; state.loading = false;
+  applyRange(parsed, range.start, range.end);
+  calendar = parsed; text = source;
+  state.updated = updated; state.stale = stale; state.error = false;
 }
 
 state.cover = function (date) {
@@ -31,8 +35,7 @@ state.cover = function (date) {
   const start = new Date(Math.min(+rangeStart, +range.start));
   const end = new Date(Math.max(+rangeEnd, +range.end));
   try {
-    const events = expandCalendar(calendar, start, end, D.ALL);
-    rangeStart = start; rangeEnd = end; D.events = events;
+    applyRange(calendar, start, end);
   } catch (e) { state.error = true; }
 };
 
@@ -54,9 +57,9 @@ state.refresh = async function () {
     if (!updated || !Number.isFinite(updated)) throw new Error('Missing update time');
     const stale = response.headers.get('X-Calendar-Stale') === 'true';
     if (source !== text || !calendar) apply(source, updated, stale);
-    else { state.updated = updated; state.stale = stale; state.error = false; state.loading = false; }
+    else { state.updated = updated; state.stale = stale; state.error = false; }
     try { localStorage.setItem(KEY, JSON.stringify({ text: source, updated })); } catch (e) { /* Native cache also persists. */ }
-  } catch (e) { state.error = true; state.stale = !!state.updated; state.loading = false; }
+  } catch (e) { state.error = true; state.stale = !!state.updated; }
   finally {
     busy = false; paint();
     if (refreshAfterClockChange) { refreshAfterClockChange = false; state.refresh(); }
@@ -73,8 +76,7 @@ App.on('minute', function (now) {
   if (calendar) {
     try {
       const range = windowAround(now);
-      const events = expandCalendar(calendar, range.start, range.end, D.ALL);
-      rangeStart = range.start; rangeEnd = range.end; D.events = events;
+      applyRange(calendar, range.start, range.end);
     } catch (e) { state.error = true; }
   }
   App.emit('time');
@@ -88,7 +90,7 @@ App.on('ready', async function () {
   try {
     const response = await fetch(ENDPOINT + 'status.json', { cache: 'no-store' });
     if (!response.ok || !(await response.json()).configured) return;
-    state.readOnly = true; state.loading = true;
+    state.readOnly = true;
     // The installed frame has one shared calendar, with no sample member profiles.
     D.people = [D.family]; D.ALL = [D.family.id];
     D.devices.forEach(function (device) {

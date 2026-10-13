@@ -113,3 +113,27 @@ test('a reset boot clock recovering through network time immediately rebuilds th
   assert.equal(f.D.events[0].title, 'Actual event');
   assert.equal(f.App.calendar.stale, true);
 });
+
+test('calendar navigation expands cached dates in both directions and keeps them on refresh', async () => {
+  const f = fixture();
+  const source = feed.replace('END:VCALENDAR',
+    'BEGIN:VEVENT\nUID:future\nDTSTART:20281013T150000Z\nDTEND:20281013T160000Z\nSUMMARY:Future event\nEND:VEVENT\n' +
+    'BEGIN:VEVENT\nUID:past\nDTSTART:20241013T150000Z\nDTEND:20241013T160000Z\nSUMMARY:Past event\nEND:VEVENT\nEND:VCALENDAR');
+  f.next(async () => ({ ok: true, text: async () => source,
+    headers: new Map([['X-Calendar-Updated', '1791914400000'], ['X-Calendar-Stale', 'false']]) }));
+  await f.start(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(f.D.events.map(e => e.title), ['Actual event']);
+
+  f.App.calendar.cover(new Date('2028-10-12T00:00:00-06:00'));
+  assert.deepEqual(f.D.events.map(e => e.title), ['Actual event', 'Future event']);
+  f.App.calendar.cover(new Date('2024-10-12T00:00:00-06:00'));
+  assert.deepEqual(f.D.events.map(e => e.title), ['Past event', 'Actual event', 'Future event']);
+
+  const snapshot = f.D.events;
+  await f.App.calendar.refresh();
+  assert.equal(f.D.events, snapshot);
+  f.next(async () => ({ ok: true, text: async () => source.replace('Actual event', 'Renamed event'),
+    headers: new Map([['X-Calendar-Updated', '1791914500000'], ['X-Calendar-Stale', 'false']]) }));
+  await f.App.calendar.refresh();
+  assert.deepEqual(f.D.events.map(e => e.title), ['Past event', 'Renamed event', 'Future event']);
+});

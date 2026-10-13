@@ -7,7 +7,6 @@ before this image is written. This program never accesses the device.
 """
 import argparse
 import gzip
-import hashlib
 import importlib.util
 import json
 from pathlib import Path

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var D = window.DATA;
-  var App = window.App = { state: D, views: {}, current: null, mode: 'day', calMode: 'normal' };
+  var App = window.App = { views: {}, current: null, mode: 'day', calMode: 'normal' };
   var $ = App.$ = function (s, r) { return (r || document).querySelector(s); };
   App.$$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
@@ -34,11 +34,6 @@
       var h = d.getHours(), m = d.getMinutes();
       var s = (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m;
       return ampm === false ? s : s + ' ' + (h >= 12 ? 'PM' : 'AM');
-    },
-    // "4 PM", "3:45 PM"
-    hour: function (d) {
-      var h = d.getHours(), m = d.getMinutes();
-      return (h % 12 || 12) + (m ? ':' + (m < 10 ? '0' : '') + m : '') + ' ' + (h >= 12 ? 'PM' : 'AM');
     },
     ampm: function (d) { return d.getHours() >= 12 ? 'PM' : 'AM'; },
     range: function (a, b) {
@@ -72,8 +67,7 @@
   };
   App.person = function (id) {
     if (id === 'family' || id === 'any') return D.family;
-    for (var i = 0; i < D.people.length; i++) if (D.people[i].id === id) return D.people[i];
-    return D.family;
+    return D.people.find(function (p) { return p.id === id; }) || D.family;
   };
   App.pstyle = function (p) {
     if (typeof p === 'string') p = App.person(p);
@@ -121,7 +115,7 @@
     return list[0] || null;
   };
   App.findEvent = function (id) {
-    return App.events().filter(function (e) { return e.id === id; })[0];
+    return App.events().find(function (e) { return e.id === id; });
   };
 
   // ------------------------------------------------------------ router
@@ -162,10 +156,10 @@
   function refreshStale(delay) {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(function next() {
-      var name = Object.keys(App.views).filter(function (k) {
+      var name = Object.keys(App.views).find(function (k) {
         var v = App.views[k];
         return k !== App.current && (!v._built || v._dirty);
-      })[0];
+      });
       if (!name) return;
       prebuild(name);
       refreshTimer = setTimeout(next, 400);
@@ -178,7 +172,7 @@
   App.on('data', markStale);
   App.on('time', markStale);
   App.rerender = function () {
-    if (App.current) App.views[App.current].show($('#view-' + App.current), { rerender: true });
+    if (App.current) build(App.current, { rerender: true });
   };
 
   // ------------------------------------------------------------ toasts (single, with undo)
@@ -191,7 +185,6 @@
     var ms = opts.ms || 5000;
     var t = document.createElement('div');
     t.className = 'toast' + (opts.tone ? ' toast--' + opts.tone : '');
-    t.style.setProperty('--ms', ms + 'ms');
     t.innerHTML = (opts.icon ? App.icon(opts.icon, 26) : '') + '<span class="toast-msg">' + html + '</span>' +
       (opts.undo ? '<button class="toast-undo">' + App.icon('undo', 22) + 'Undo</button>' : '');
     box.appendChild(t);
@@ -222,16 +215,9 @@
   };
   App.closeSheet = function () {};
 
-  // Stage-local coordinates; the logical height stays 800px as the stage widens.
-  App.centerOf = function (el) {
-    var stage = $('#stage').getBoundingClientRect(), r = el.getBoundingClientRect(), k = stage.height / 800;
-    return { x: (r.left + r.width / 2 - stage.left) / k, y: (r.top + r.height / 2 - stage.top) / k };
-  };
-
   // ------------------------------------------------------------ press-and-hold
   App.hold = function (el, ms, cb) {
     var t = null;
-    el.style.setProperty('--hold', ms + 'ms');
     el.addEventListener('pointerdown', function () {
       if (cb.enabled && !cb.enabled()) return;
       el.classList.add('is-holding');

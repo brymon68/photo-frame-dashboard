@@ -61,9 +61,7 @@ export function expandCalendar(calendar, from, to, people) {
         // Cancelled instances need not include DTSTART/DTEND.
         if (exception && exception.component.getFirstPropertyValue('status') === 'CANCELLED') continue;
         const detail = event.getOccurrenceDetails(occurrence);
-        if (detail.item.component.getFirstPropertyValue('status') !== 'CANCELLED') {
-          add(detail.item, detail.startDate, detail.endDate, occurrence);
-        }
+        add(detail.item, detail.startDate, detail.endDate, occurrence);
       }
     }
     // An instance can be moved into the window from a recurrence outside it.

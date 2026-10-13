@@ -2,21 +2,21 @@
 (function () {
   'use strict';
   var D = window.DATA;
-  var V = { el: null, store: 'all', query: '', drawer: false, pending: {}, flash: null };
+  var V = { el: null, store: 'all', query: '', drawer: false, pending: {} };
 
-  function open() { return D.groceries.filter(function (g) { return !g.done && (V.store === 'all' || g.store === V.store); }); }
+  function inView(g) { return !g.done && (V.store === 'all' || g.store === V.store); }
+  function open() { return D.groceries.filter(inView); }
   function done() { return D.groceries.filter(function (g) { return g.done && (V.store === 'all' || g.store === V.store); }); }
-  function storeName(id) { return D.stores.filter(function (s) { return s.id === id; })[0].name; }
 
   function categorize(name) {
     var n = name.toLowerCase();
-    var hit = D.catalog.filter(function (c) { return c[0].toLowerCase() === n; })[0] ||
-      D.catalog.filter(function (c) { var a = c[0].toLowerCase(); return a.indexOf(n) > -1 || n.indexOf(a) > -1; })[0] ||
-      D.catalog.filter(function (c) { return n.split(/\s+/).some(function (w) { return w.length > 3 && c[0].toLowerCase().indexOf(w) > -1; }); })[0];
+    var hit = D.catalog.find(function (c) { return c[0].toLowerCase() === n; }) ||
+      D.catalog.find(function (c) { var a = c[0].toLowerCase(); return a.indexOf(n) > -1 || n.indexOf(a) > -1; }) ||
+      D.catalog.find(function (c) { return n.split(/\s+/).some(function (w) { return w.length > 3 && c[0].toLowerCase().indexOf(w) > -1; }); });
     return hit ? hit[1] : 'Other';
   }
   function find(name, isDone) {
-    return D.groceries.filter(function (g) { return !!g.done === isDone && g.name.toLowerCase() === name.toLowerCase(); })[0];
+    return D.groceries.find(function (g) { return !!g.done === isDone && g.name.toLowerCase() === name.toLowerCase(); });
   }
 
   function row(g) {
@@ -82,7 +82,6 @@
     if (!n) c.parentNode.removeChild(c);
     else c.querySelector('[data-cat-count]').textContent = n;
   }
-  function inView(g) { return !g.done && (V.store === 'all' || g.store === V.store); }
   function insertRow(g) {
     var cat = V.el.querySelector('.s-cat[data-cat="' + g.cat + '"]');
     if (!inView(g)) return paintHead();
@@ -150,7 +149,7 @@
       msg = 'Added back <b>' + App.esc(g.name) + '</b>';
       paintList();
     } else {
-      var cat = D.catalog.filter(function (c) { return c[0].toLowerCase() === name.toLowerCase(); })[0];
+      var cat = D.catalog.find(function (c) { return c[0].toLowerCase() === name.toLowerCase(); });
       g = { id: D._gid(), name: cat ? cat[0] : name.charAt(0).toUpperCase() + name.slice(1), cat: categorize(name), qty: 1, store: V.store === 'all' ? 'grocer' : V.store, done: false, note: '' };
       D.groceries.push(g);
       msg = 'Added <b>' + App.esc(g.name) + '</b> to ' + g.cat;
@@ -195,13 +194,13 @@
   function onClick(e) {
     var t;
     if ((t = e.target.closest('[data-check]'))) {
-      var g = D.groceries.filter(function (x) { return x.id === t.dataset.check; })[0];
+      var g = D.groceries.find(function (x) { return x.id === t.dataset.check; });
       if (g && !V.pending[g.id]) check(g);
       else if (g) { delete V.pending[g.id]; t.parentNode.classList.remove('is-checking'); }
       return;
     }
     if ((t = e.target.closest('[data-qty]'))) {
-      var q = D.groceries.filter(function (x) { return x.id === t.dataset.id; })[0];
+      var q = D.groceries.find(function (x) { return x.id === t.dataset.id; });
       q.qty = Math.max(1, q.qty + +t.dataset.qty);
       t.parentNode.querySelector('.num').textContent = q.qty;
       refreshSuggestFor(q);
@@ -211,7 +210,7 @@
     if ((t = e.target.closest('[data-store]'))) { V.store = t.dataset.store; return paintList(); }
     if ((t = e.target.closest('[data-drawer]'))) { V.drawer = !V.drawer; return paintList(); }
     if ((t = e.target.closest('[data-revive]'))) {
-      var r = D.groceries.filter(function (x) { return x.id === t.dataset.revive; })[0];
+      var r = D.groceries.find(function (x) { return x.id === t.dataset.revive; });
       r.done = false; paintList(); paintSuggest(); App.emit('data');
       return App.toast('Added back <b>' + App.esc(r.name) + '</b>', { icon: 'cart', ms: 2500 });
     }

@@ -96,7 +96,7 @@
   function status() {
     var lights = D.devices.filter(function (d) { return d.type === 'light' && d.on; }).length;
     var unlocked = D.devices.filter(function (d) { return d.type === 'lock' && !d.locked; });
-    var garage = D.devices.filter(function (d) { return d.type === 'garage'; })[0];
+    var garage = D.devices.find(function (d) { return d.type === 'garage'; });
     var secure = !unlocked.length && garage.state === 'closed';
     var secText = secure ? 'All locked' : (garage.state !== 'closed' ? 'Garage open' : unlocked[0].name + ' unlocked');
     return '<div class="label">Home</div>' +
@@ -106,12 +106,12 @@
   }
 
   function paint() {
-    var el = V.el;
+    var el = V.el, laneBox = el.querySelector('.h-lanes');
     el.querySelector('.h-clock').innerHTML = clock();
     el.querySelector('.h-weather').innerHTML = weather();
     el.querySelector('.h-hero-slot').innerHTML = hero();
-    el.querySelector('.h-lanes').innerHTML = lanes();
-    el.querySelector('.h-lanes').style.gridTemplateColumns = 'repeat(' + D.people.length + ', 1fr)';
+    laneBox.innerHTML = lanes();
+    laneBox.style.gridTemplateColumns = 'repeat(' + D.people.length + ', 1fr)';
     el.querySelector('.h-shop').innerHTML = shopping();
     el.querySelector('.h-status').innerHTML = status();
   }
