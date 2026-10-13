@@ -1,9 +1,20 @@
 # Migrate Home HQ to the personal signing identity
 
-This is a migration plan, not a record of a completed device change. The frame
-still runs Home HQ 1.12 as `com.wesbos.homehq`. The prepared source builds Home HQ
-1.13 (version code 14) as `com.brymon68.homehq`, with the owner's new signing key.
-Both apps keep the visible name **Home HQ** and the same dashboard design.
+The owner's frame was migrated on **2026-10-12** to Home HQ **1.13** (version
+code 14), `com.brymon68.homehq`, with the owner's new signing key. Calendar
+configuration, allowlisted native settings/caches, and browser cache/preferences
+were transferred and verified. The personal app is selected as Home and navigation
+service. The old `com.wesbos.homehq` app and its data remain installed, with its
+Home alias and navigation service disabled. Both apps retain the visible name
+**Home HQ** and the same dashboard design.
+
+On-device checks covered all five views, four calendar modes, touch dragging and
+cancellation, Undo, lock/garage interactions, standby/Night behavior, and browser
+and native offline caches with recovery. **Reboot verification was not performed. Native
+two-finger-menu and navigation-button acceptance remain unverified.**
+
+The procedure below records how to migrate another installation still using the
+old package. It is not required again for routine updates to this owner's app.
 
 The retained 1.12 APK has a generic **Android Debug** certificate subject;
 `wesbos` is its inherited package namespace, not the certificate's owner name.
@@ -16,7 +27,7 @@ the new package alongside it preserves the working app while migration is checke
 Read the ignored `diagnostics/frame156-session/FRAME.md`. Select the intended
 transport explicitly throughout: `adb -d` for the single USB device, or
 `adb -s '<frame-address>:5555'` for Wi-Fi. Verify `ro.product.model` is `FRAME156`
-before changes. This plan requires no firmware or partition writes or captures.
+before changes. This procedure requires no firmware or partition writes or captures.
 
 Build the bundled APK using the [kiosk guide](../dashboard/kiosk/README.md).
 Verify its package, version, bundled fonts/images, and signing certificate against
@@ -25,7 +36,7 @@ files, and the known-good old APK. Record fingerprints and migration results in
 the private session notes, without copying passwords or calendar contents into
 logs or tracked documentation.
 
-The repo does not contain an automatic cross-package data migration tool. Prepare
+The tracked repo does not contain an automatic cross-package data migration tool. Prepare
 and verify the selective private export/import described below before switching
 the launcher. Creating an APK alone does not transfer this state.
 
@@ -46,8 +57,10 @@ exports only in ignored private files with owner-only access.
 Transfer only these app-owned items. After stopping each app for its snapshot or
 restore, verify it is no longer writing. Use the destination package's actual UID,
 owner-only permissions, and Android SELinux labels for restored files. Compare
-file contents and timestamps privately; do not log personal calendar data. If
-using a WebView debugging session for logical storage export/import, enable it
+file contents and timestamps privately; do not log personal calendar data. When
+restoring into initialized app storage, remove stale destination atomic backup
+files for these allowlisted items while the app is stopped, so they cannot replace
+the imported data on startup. If using a WebView debugging session for logical storage export/import, enable it
 only for that work and disable it afterward. Do not copy the entire app data
 directory, another app's ownership metadata, or a WebView profile wholesale.
 
@@ -98,11 +111,19 @@ Both appear as **Home HQ navigation**. Enable the new service, disable the old o
 and confirm there is one floating navigation bar. Check that its placement was
 preserved, Back works outside the app, and Dashboard opens the new package.
 
+Disable the old Home alias once the new default is selected, while retaining its
+app and data. Otherwise the new app's native "Open launcher" action can select
+the old Home HQ instead of the system launcher:
+
+```sh
+adb -d shell su -c 'pm disable com.wesbos.homehq/.Home'
+```
+
 Verify Android resolves Home to the new component, then reboot and confirm the
 new app starts with its calendar, navigation, and brightness behavior intact.
 Update the private session record and public current-setup documentation only
 after those device checks pass. Keep the old app installed until the owner agrees
-it can be retired; do not remove its data or key as part of preparing this migration.
+it can be retired; do not remove its data or key as part of this migration.
 
 Future updates must retain `com.brymon68.homehq` and the same new signing key.
 Use `adb install -r` for those updates after verifying the selected device; the

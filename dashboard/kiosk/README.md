@@ -1,12 +1,13 @@
 # Home HQ kiosk on the Pastigio frame
 
 Home HQ packages the dashboard in a fullscreen Android WebView. This source now
-builds **Home HQ 1.13, `com.brymon68.homehq`**, signed with the owner's new key.
-The frame still has **1.12, `com.wesbos.homehq`**, selected as its default launcher.
-The new package is a separate app; building it does not migrate or update the
-installed app. Follow the [migration plan](../../docs/migrate-to-brymon68.md)
-before changing the frame. See the [current frame setup](../../docs/pastigio-frame156.md)
-for the installed configuration. Neither building nor migration changes firmware.
+builds **Home HQ 1.13, `com.brymon68.homehq`**, signed with the owner's key and
+installed as the frame's default Home app. Its navigation service is selected;
+the old 1.12 package and data remain installed with Home/navigation disabled.
+The [migration record](../../docs/migrate-to-brymon68.md) covers the 2026-10-12
+transfer and checks. Reboot verification and native-menu/navigation-button
+acceptance were not completed. See the [current frame setup](../../docs/pastigio-frame156.md)
+for operation. Building alone does not update the device or change firmware.
 
 ## Build the dashboard
 
@@ -61,8 +62,8 @@ out of `dist/`, JavaScript, and the APK.
 Use the new brymon68 signing key and its private password file. Both paths must
 be absolute and readable. The builder does not generate a substitute key. Keep
 these files outside Git and outside `kiosk/build/`, which each build replaces.
-Retain the old app's key separately until migration and any later retirement are
-complete; it cannot sign updates to the new app.
+Retain the old app's key separately while that app is retained; it cannot sign
+updates to the personal app.
 
 ```sh
 BUNDLE_DASHBOARD=1 \
@@ -83,15 +84,14 @@ Bundled files are served inside WebView at a local HTTPS origin, so dashboard
 startup needs no host server, USB connection, or internet. Live feeds still need
 internet to refresh.
 
-The first installation of `com.brymon68.homehq` must follow the migration plan;
-it does not inherit the old app's calendar, WebView storage, navigation placement,
-or Android Home/accessibility settings. Keep the old app installed until the new
-one is verified.
+On another frame still using the old package, a first installation must follow
+the migration procedure: it does not inherit calendar, WebView storage, navigation
+placement, or Android Home/accessibility settings. This owner's transfer is complete.
 
-## Update after migration
+## Update the installed app
 
-Only after migration is complete, use these commands for later updates to the
-new package. Select the intended ADB transport and verify the model before
+Use these commands for later updates to the personal package. Select the
+intended ADB transport and verify the model before
 installation. For the single USB device, expect `FRAME156` from the first command:
 
 ```sh
@@ -118,18 +118,19 @@ menu. **Home HQ navigation**, enabled in Android Accessibility settings, supplie
 floating Back and Dashboard buttons outside the app. Drag their dots to reposition
 them. The buttons hide inside Home HQ.
 
-The old package is still the installed Home app. The new app's Home alias starts
-disabled. During the migration cutover, after data transfer and verification,
-enable and select the new alias:
+The personal app's Home alias is already enabled and selected on this frame.
+For a new installation, the alias starts disabled; after data transfer and
+verification, enable and select it with:
 
 ```sh
 adb -d shell am start -n com.brymon68.homehq/.MainActivity --ez home true
 adb -d shell cmd package set-home-activity com.brymon68.homehq/.Home
 ```
 
-Enable the new package's navigation service and disable the old package's service
-as part of that cutover. Both use the visible label **Home HQ navigation**; identify
-them by package name so only the new service supplies floating buttons.
+The selected navigation service is `com.brymon68.homehq/.NavigationService`.
+Both packages use the visible label **Home HQ navigation**; identify them by
+package name. Keep the old service and Home alias disabled while its app is
+retained, so it cannot supply a second bar or appear as the alternate launcher.
 
 Standby starts after 120 seconds idle: Ambient by day, Night from 21:00 to 06:00.
 Both use 5% window brightness. Touch restores the device's normal brightness;
@@ -144,10 +145,9 @@ creation and calendar demo controls are hidden while connected. Native and
 browser caches preserve saved events, with a timestamp/status label. Date windows
 refresh at midnight and after the device clock changes.
 
-The calendar configuration survives later in-place updates of the same package.
-It must be transferred for the first installation of the new package. This helper
-now targets **`com.brymon68.homehq`**. To configure or change its calendar, keep the
-secret URL in an ignored private file, then run from `dashboard/`:
+The calendar configuration was transferred and survives in-place updates of the
+same package. This helper targets **`com.brymon68.homehq`**. To configure or change
+its calendar, keep the secret URL in an ignored private file, then run from `dashboard/`:
 
 ```sh
 python3 kiosk/configure-calendar.py --usb --model FRAME156 --url-file /private/path/calendar-url.txt
