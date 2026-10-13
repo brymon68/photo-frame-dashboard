@@ -1,171 +1,157 @@
-# Home HQ kiosk navigation
+# Home HQ kiosk on the Pastigio frame
 
-Hold two fingers still on the dashboard for 1.5 seconds to open the native controls:
+Home HQ packages the dashboard in a fullscreen Android WebView. The owner's
+installed version is 1.12, with `com.wesbos.homehq/.Home` selected as the default
+launcher. See the [current frame setup](../../docs/pastigio-frame156.md) for device
+state and connection instructions. This guide builds and updates the app on a Mac;
+it does not require a firmware change.
 
-- **Open launcher** opens another installed Home app, such as Rootless Launcher.
-  If none is available, it opens Android Settings.
-- **Android settings** opens the device's Settings app.
-- **Reload dashboard** reloads the current URL.
-- **Back to dashboard** dismisses the controls.
+## Build the dashboard
 
-The dashboard keeps its 800px logical height and expands its layout horizontally
-on wider screens, filling a 16:9 frame without side bars. Text and controls keep
-their proportions and vertical size.
-
-The packaged dashboard dims the screen backlight to 5% in the ambient and night
-standby displays. Tapping back into the dashboard restores the device's normal
-brightness. Reloading also restores normal brightness; the device's saved
-brightness setting stays unchanged.
-
-After two minutes without touch, the dashboard uses the red Night standby
-display from 9 PM until 6 AM, and the Ambient display during the day. Tapping
-Night wakes the dashboard; after 20 seconds without touch, it returns to Night.
-
-## Frames without Home or Back buttons
-
-Some frame firmware omits Android's navigation bar. The two-finger gesture only
-works inside Home HQ, so it cannot bring you back from another app's settings.
-
-Enable **Home HQ navigation** in Android **Settings → Accessibility**. The
-optional service adds floating **Back** and **Dashboard** buttons outside Home HQ:
-
-- **Back** performs Android's normal Back action.
-- **Dashboard** returns directly to Home HQ, keeping the current dashboard URL.
-- Drag the dots to move the buttons. Their position is saved.
-
-The buttons hide while Home HQ is active and return when you leave it. Android
-keeps the service enabled across reboots. It requests no accessibility events or
-screen-content access and does not require root. Disable **Home HQ navigation**
-in Accessibility settings to remove the buttons.
-
-Keep an ADB connection available while enabling the service on a frame with no
-other way back. If needed, return to the kiosk with:
-
-```sh
-adb shell am start -n com.wesbos.homehq/.MainActivity
-```
-
-This service supplies navigation controls. To start the dashboard at boot,
-enable Home HQ's optional Home component and make it the default launcher:
-
-```sh
-adb shell am start -n com.wesbos.homehq/.MainActivity --ez home true
-adb shell cmd package set-home-activity com.wesbos.homehq/.Home
-```
-
-The Home component is disabled on installation. To undo, first select another
-default Home app, then launch Home HQ with `--ez home false`.
-
-To save a dashboard URL for later launches, including reboot:
-
-```sh
-adb shell am start -n com.wesbos.homehq/.MainActivity --es url https://your-dashboard/
-```
-
-Ordinary VIEW links open without replacing the saved startup URL. The two-finger
-hold opens the controls when Home HQ is the default launcher.
-
-## Build and install
-
-Use JDK 17, Android build-tools 34.0.0, and platform 34. From `dashboard/`:
-
-```sh
-ANDROID_HOME=/path/to/android-sdk bash kiosk/build.sh
-adb install -r kiosk/build/homehq.apk
-```
-
-The kiosk loads the existing hosted dashboard over the frame's Wi-Fi. A USB
-connection is only needed for installation or diagnostics, not normal use.
-
-## Bundle the dashboard for offline startup
-
-Build the dashboard with relative asset paths, then include it in the APK:
+Use Node/npm, JDK 17, Android SDK platform 34, and build-tools 34.0.0.
+Set `JAVA_HOME` to the JDK and ensure its `bin` directory is on `PATH`.
+From `dashboard/`:
 
 ```sh
 npm ci
+npm test
 npm run build -- --base=./
-BUNDLE_DASHBOARD=1 ANDROID_HOME=/path/to/android-sdk bash kiosk/build.sh
 ```
 
-When `assets/dashboard/index.html` is present, the kiosk opens the packaged
-dashboard by default. It serves those files from a local HTTPS origin inside
-WebView; no server, USB connection, or Wi-Fi is needed for the page itself.
-The usual hosted demo remains the default for builds without bundled assets.
+This creates `dist/` with relative asset paths. It does **not** download local
+fonts/images or enable the installed frame's real-time/offline HTML flags.
 
-For an offline package, cache the Google Fonts stylesheet and font files in
-`dist` and replace the remote stylesheet with local references. The camera demo
-can use `./offline/cameras/<seed>.jpg` with the `data-offline-cameras` HTML root
-attribute; include the camera seeds from `js/data.js` plus `visitor-porch`.
+## Prepare the offline package
 
-Add `data-real-time` to the HTML root to use the device clock at startup instead
-of the demo's 3:18 PM starting time. The demo controls can still change the time
-for previews.
+Perform these steps in `dist/` after each Vite build, using the existing approved
+assets retained in the private workspace:
 
-`KIOSK_KEYSTORE=/path/to/keystore` optionally changes the signing-key location;
-keep that key private and retain it to install later app updates.
+1. Copy the Archivo and Instrument Serif font files and their stylesheet into
+   `dist/`, for example under `offline/fonts/`. Rewrite the stylesheet's font
+   URLs to local files and replace the remote Google Fonts stylesheet link in
+   `dist/index.html` with the local stylesheet. Preserve font weights, width
+   ranges, and italic faces so the design stays unchanged.
+2. Place the demo image assets at `dist/offline/cameras/<seed>.jpg`: include every
+   camera seed in `js/data.js`, the media artwork seed, and `visitor-porch`.
+   These are the existing camera/media/doorbell illustrations, not a photo
+   slideshow or live camera feed.
+3. Add the flags to the HTML root in `dist/index.html`:
 
-## Private, read-only Google Calendar
+   ```html
+   <html lang="en" data-real-time data-offline-cameras>
+   ```
 
-The bundled dashboard can subscribe to one Google Calendar secret iCal feed.
-Its existing home and calendar views display real events, including recurring
-appointments, modified/cancelled instances, and all-day events. Shared-calendar
-events are assigned to the whole family. Calendar creation and calendar demo
-controls are hidden while connected; edit events in Google Calendar.
+   `data-real-time` uses the device clock. `data-offline-cameras` selects the
+   packaged image paths used by the Home controls and demo alerts.
+4. Check that the local font stylesheet, every referenced font, image, script,
+   and stylesheet exists. Preview the prepared `dist/` with `npm run preview`;
+   check all five views, fonts, and Home interactions before packaging.
 
-The kiosk downloads the feed directly over HTTPS every five minutes. No hosted
-service or Google account sign-in on the frame is needed. The address remains
-in the app's private files, outside JavaScript and the APK. Native and browser
-caches retain the last downloaded calendar; the calendar view shows its update
-time and indicates when saved data is being used. Calendar dates refresh at
-midnight and after network time corrects a reset boot clock. Only the bundled HTTPS origin
-serves calendar data; the hosted demo stays unchanged.
+Browser previews use the sample calendar; the private family calendar is
+available through the bundled kiosk's native transport.
 
-On the owner's rooted frame, save the secret address in an ignored local file,
-install the bundled APK with the retained signing key, then configure it from
-`dashboard/` with an explicitly selected transport and expected model:
+There is no automated offline-assets preparation step. Re-running `npm run build`
+replaces `dist/`, so repeat preparation afterward. Keep the private calendar URL
+out of `dist/`, JavaScript, and the APK.
+
+## Build and update the APK
+
+Use the **existing retained signing key**. `KIOSK_KEYSTORE` must be an absolute
+path to that readable file; the builder does not generate a substitute key.
+The existing keystore uses the signing passwords expected by `build.sh`.
+
+```sh
+BUNDLE_DASHBOARD=1 \
+ANDROID_HOME=/absolute/path/to/android-sdk \
+KIOSK_KEYSTORE=/absolute/private/path/to/retained.keystore \
+bash kiosk/build.sh
+```
+
+The script copies the prepared `dist/` into the APK, compiles the native sources,
+and signs `kiosk/build/homehq.apk`. It does not contact or install to a frame.
+Bundled files are served inside WebView at a local HTTPS origin, so dashboard
+startup needs no host server, USB connection, or internet. Live feeds still need
+internet to refresh.
+
+Select the intended ADB transport and verify the model before installation.
+For the single USB device, expect `FRAME156` from the first command:
+
+```sh
+adb -d shell getprop ro.product.model
+adb -d install -r kiosk/build/homehq.apk
+adb -d shell am start -n com.wesbos.homehq/.MainActivity
+```
+
+For Wi-Fi, use `adb -s '<frame-address>:5555'` in place of `adb -d` in every
+command. Get the current address from the private frame notes. An in-place update
+with the same signing identity retains app data and calendar configuration;
+do not uninstall the app to work around a signature mismatch.
+
+After updating, check the five views, calendar/weather status, light/blind drags,
+lock holds, garage confirmation, and standby/wake brightness. Confirm Home HQ
+still resolves as Home and **Home HQ navigation** remains enabled and usable
+outside the app.
+Do not repeat firmware captures for routine app updates.
+
+## Navigation and standby
+
+Hold two fingers still for 1.5 seconds to open the native launcher/settings/reload
+menu. **Home HQ navigation**, enabled in Android Accessibility settings, supplies
+floating Back and Dashboard buttons outside the app. Drag their dots to reposition
+them. The buttons hide inside Home HQ.
+
+The installed frame already uses Home HQ as Home. For a fresh app installation,
+the Home alias starts disabled; after verifying `FRAME156`, enable and select it:
+
+```sh
+adb -d shell am start -n com.wesbos.homehq/.MainActivity --ez home true
+adb -d shell cmd package set-home-activity com.wesbos.homehq/.Home
+```
+
+Standby starts after 120 seconds idle: Ambient by day, Night from 21:00 to 06:00.
+Both use 5% window brightness. Touch restores the device's normal brightness;
+Night returns after 20 seconds idle. Reload also restores normal brightness.
+The saved system brightness is unchanged.
+
+## Calendar and weather
+
+The bundled kiosk downloads one Google Calendar secret iCal feed over native
+HTTPS every five minutes. Events are read-only and assigned to the Family profile;
+creation and calendar demo controls are hidden while connected. Native and
+browser caches preserve saved events, with a timestamp/status label. Date windows
+refresh at midnight and after the device clock changes.
+
+The existing calendar configuration survives an in-place update. To configure
+or change it, keep the secret URL in an ignored private file, then run from
+`dashboard/`:
 
 ```sh
 python3 kiosk/configure-calendar.py --usb --model FRAME156 --url-file /private/path/calendar-url.txt
 ```
 
-Use `--serial DEVICE` instead of `--usb` for an explicitly selected Wi-Fi
-transport. The helper verifies the model and transfers the address over standard
-input, without placing the secret in command arguments or logs. Reload Home HQ
-after configuration. Removing the app-private `files/calendar-url.txt` and
-reloading returns to the sample calendar. Delete `files/calendar-feed.ics` and
-clear the dashboard's `hq-google-calendar-v1` local-storage entry if also removing
-cached calendar data. This helper requires the frame's existing `su`; it does
-not change firmware or grant root.
+For Wi-Fi use `--serial '<frame-address>:5555'` instead of `--usb`. The helper
+verifies the model and uses the frame's existing `su` to transfer the address over
+standard input into app-private storage. It keeps the secret out of command
+arguments and logs. Reload Home HQ afterward.
 
-Run calendar parser and synchronization checks from `dashboard/` with `npm test`.
+Weather uses the fixed public Open-Meteo endpoint for Albuquerque, with Fahrenheit
+temperatures, mph wind, daily highs/lows, and seven upcoming hours. Native and
+browser caches preserve the last good forecast; refresh is every 15 minutes and
+on connectivity recovery. The dashboard labels saved data during outages.
+Home controls, camera/media previews, scenes, and Agents usage remain demo data.
 
-## Live Albuquerque weather
+## Host checks
 
-Today and the idle clock show Open-Meteo weather for Albuquerque, NM
-(35.0844, -106.6504), with Fahrenheit temperatures, wind in mph, daily highs/lows,
-and seven upcoming hourly forecasts. Weather refreshes every 15 minutes and
-when connectivity returns. No account, API key, location permission, or paid
-subscription is needed for this personal use. Attribution links to Open-Meteo.
-
-The bundled kiosk downloads the fixed public HTTPS endpoint through its native
-transport; hosted previews call Open-Meteo directly. Native and browser caches
-retain the last successful forecast across reloads and outages. The panel labels
-saved data with its update date/time; a first launch without connectivity shows
-weather unavailable and retries automatically. Hourly forecasts carry full dates,
-so midnight does not wrap into yesterday's forecast. Photos and slideshows are
-removed; the idle display keeps the clock, weather, and next appointment.
-
-Run calendar and weather checks from `dashboard/` with `npm test`.
-
-Native HTTPS/cache contracts can also run on the host with JDK 17 and the Gson
-JAR bundled in Android command-line tools:
+`npm test` covers feeds, synchronization, and Home control gestures. Native
+HTTPS/cache contracts use JDK 17 and the Gson JAR included in Android command-line
+tools:
 
 ```sh
 python3 kiosk/tests/test-feeds.py --java-home /path/to/jdk17 --gson-jar /path/to/gson.jar
 ```
 
-These checks use temporary files, fake HTTPS connections, and small Android API
-adapters; they never contact a frame or a feed. They cover validation, size limits,
-refresh/reuse timing, saved-data fallback, response headers, and storage failures.
-Pass `--source-dir /path/to/old/kiosk/src/com/wesbos/homehq` to check an older
-implementation against the same contracts.
+Native checks use temporary files, fake HTTPS connections, and small Android API
+adapters. They exercise payload validation, size limits, cache reuse/fallback,
+timestamps, response headers, and storage failures without contacting a frame
+or a feed. `--source-dir /path/to/kiosk/src/com/wesbos/homehq` selects another
+checkout for comparison.

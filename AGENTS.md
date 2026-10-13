@@ -1,5 +1,9 @@
 # Local frame instructions
 
+This fork maintains Home HQ on the owner's Pastigio FRAME156. The setup changed
+the default launcher and app configuration; it did not replace Android firmware.
+See `docs/pastigio-frame156.md` for the current public operating guide.
+
 For work on this owner's connected Pastigio frame, first read
 `diagnostics/frame156-session/FRAME.md`. It contains the private Wi-Fi ADB
 address, connection commands, installed setup, and backup preferences. The
