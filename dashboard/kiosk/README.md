@@ -1,12 +1,10 @@
 # Home HQ kiosk on the Pastigio frame
 
-Home HQ packages the dashboard in a fullscreen Android WebView. This source now
+Home HQ packages the dashboard in a fullscreen Android WebView. This source
 builds **Home HQ 1.13, `com.brymon68.homehq`**, signed with the owner's key and
 installed as the frame's default Home app. Its navigation service is selected;
-the old 1.12 package and data remain installed with Home/navigation disabled.
-The [migration record](../../docs/migrate-to-brymon68.md) covers the 2026-10-12
-transfer and checks. Reboot verification and native-menu/navigation-button
-acceptance were not completed. See the [current frame setup](../../docs/pastigio-frame156.md)
+reboot verification and native-menu/navigation-button acceptance have not been
+completed for the current installation. See the [current frame setup](../../docs/pastigio-frame156.md)
 for operation. Building alone does not update the device or change firmware.
 
 ## Build the dashboard
@@ -59,11 +57,9 @@ out of `dist/`, JavaScript, and the APK.
 
 ## Build the personal APK
 
-Use the new brymon68 signing key and its private password file. Both paths must
+Use the brymon68 signing key and its private password file. Both paths must
 be absolute and readable. The builder does not generate a substitute key. Keep
 these files outside Git and outside `kiosk/build/`, which each build replaces.
-Retain the old app's key separately while that app is retained; it cannot sign
-updates to the personal app.
 
 ```sh
 BUNDLE_DASHBOARD=1 \
@@ -78,15 +74,25 @@ from the keystore password, set `KIOSK_KEY_PASSWORD_FILE` to its absolute privat
 file path; otherwise it uses `KIOSK_KEYSTORE_PASSWORD_FILE`. Passwords are read
 from files rather than placed in command arguments.
 
-The script copies the prepared `dist/` into the APK, compiles the native sources,
+The script bundles the prepared `dist/` by default, compiles the native sources,
 and signs `kiosk/build/homehq.apk`. It does not contact or install to a frame.
-Bundled files are served inside WebView at a local HTTPS origin, so dashboard
-startup needs no host server, USB connection, or internet. Live feeds still need
-internet to refresh.
+The app opens its bundled dashboard by default. Bundled files are served inside
+WebView at a local HTTPS origin, so dashboard startup needs no host server, USB
+connection, or internet. Live feeds still need internet to refresh.
 
-On another frame still using the old package, a first installation must follow
-the migration procedure: it does not inherit calendar, WebView storage, navigation
-placement, or Android Home/accessibility settings. This owner's transfer is complete.
+For a custom hosted dashboard, `BUNDLE_DASHBOARD=0` skips bundling and requires
+an explicit dashboard URL. After verifying the device model, save that URL for
+future starts with:
+
+```sh
+adb -d shell am start -n com.brymon68.homehq/.MainActivity --es url 'https://your-dashboard.example/'
+```
+
+A VIEW intent opens a URL once without changing the saved startup page. Use the
+bundled build for this owner's frame.
+
+A fresh installation starts with empty app storage. Configure its calendar,
+navigation placement, and Android Home/accessibility settings explicitly.
 
 ## Update the installed app
 
@@ -119,7 +125,7 @@ floating Back and Dashboard buttons outside the app. Drag their dots to repositi
 them. The buttons hide inside Home HQ.
 
 The personal app's Home alias is already enabled and selected on this frame.
-For a new installation, the alias starts disabled; after data transfer and
+For a new installation, the alias starts disabled; after configuration and
 verification, enable and select it with:
 
 ```sh
@@ -128,9 +134,6 @@ adb -d shell cmd package set-home-activity com.brymon68.homehq/.Home
 ```
 
 The selected navigation service is `com.brymon68.homehq/.NavigationService`.
-Both packages use the visible label **Home HQ navigation**; identify them by
-package name. Keep the old service and Home alias disabled while its app is
-retained, so it cannot supply a second bar or appear as the alternate launcher.
 
 Standby starts after 120 seconds idle: Ambient by day, Night from 21:00 to 06:00.
 Both use 5% window brightness. Touch restores the device's normal brightness;
@@ -145,8 +148,8 @@ creation and calendar demo controls are hidden while connected. Native and
 browser caches preserve saved events, with a timestamp/status label. Date windows
 refresh at midnight and after the device clock changes.
 
-The calendar configuration was transferred and survives in-place updates of the
-same package. This helper targets **`com.brymon68.homehq`**. To configure or change
+The calendar configuration survives in-place updates of the same package.
+This helper targets **`com.brymon68.homehq`**. To configure or change
 its calendar, keep the secret URL in an ignored private file, then run from `dashboard/`:
 
 ```sh

@@ -3,7 +3,7 @@
 #   brew install --cask android-commandlinetools
 #   sdkmanager --sdk_root=$ANDROID_HOME "build-tools;34.0.0" "platforms;android-34"
 # Set KIOSK_KEYSTORE and KIOSK_KEYSTORE_PASSWORD_FILE to the personal app's private signing files.
-# Follow README.md for the separate app migration and later updates.
+# Follow README.md for offline asset preparation and app updates.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -30,7 +30,7 @@ fi
 rm -rf build && mkdir -p build/gen build/classes
 
 ASSETS=()
-if [ "${BUNDLE_DASHBOARD:-0}" = "1" ]; then
+if [ "${BUNDLE_DASHBOARD:-1}" = "1" ]; then
   if [ ! -f ../dist/index.html ]; then
     echo "Build the dashboard first: npm run build -- --base=./" >&2
     exit 1
