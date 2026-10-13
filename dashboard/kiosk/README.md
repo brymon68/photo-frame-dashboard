@@ -1,10 +1,13 @@
 # Home HQ kiosk on the Pastigio frame
 
-Home HQ packages the dashboard in a fullscreen Android WebView. The owner's
-installed version is 1.12, with `com.wesbos.homehq/.Home` selected as the default
-launcher. See the [current frame setup](../../docs/pastigio-frame156.md) for device
-state and connection instructions. This guide builds and updates the app on a Mac;
-it does not require a firmware change.
+Home HQ packages the dashboard in a fullscreen Android WebView. This source now
+builds **Home HQ 1.13, `com.brymon68.homehq`**, signed with the owner's key and
+installed as the frame's default Home app. Its navigation service is selected;
+the old 1.12 package and data remain installed with Home/navigation disabled.
+The [migration record](../../docs/migrate-to-brymon68.md) covers the 2026-10-12
+transfer and checks. Reboot verification and native-menu/navigation-button
+acceptance were not completed. See the [current frame setup](../../docs/pastigio-frame156.md)
+for operation. Building alone does not update the device or change firmware.
 
 ## Build the dashboard
 
@@ -54,18 +57,26 @@ There is no automated offline-assets preparation step. Re-running `npm run build
 replaces `dist/`, so repeat preparation afterward. Keep the private calendar URL
 out of `dist/`, JavaScript, and the APK.
 
-## Build and update the APK
+## Build the personal APK
 
-Use the **existing retained signing key**. `KIOSK_KEYSTORE` must be an absolute
-path to that readable file; the builder does not generate a substitute key.
-The existing keystore uses the signing passwords expected by `build.sh`.
+Use the new brymon68 signing key and its private password file. Both paths must
+be absolute and readable. The builder does not generate a substitute key. Keep
+these files outside Git and outside `kiosk/build/`, which each build replaces.
+Retain the old app's key separately while that app is retained; it cannot sign
+updates to the personal app.
 
 ```sh
 BUNDLE_DASHBOARD=1 \
 ANDROID_HOME=/absolute/path/to/android-sdk \
-KIOSK_KEYSTORE=/absolute/private/path/to/retained.keystore \
+KIOSK_KEYSTORE=/absolute/private/path/to/brymon68.keystore \
+KIOSK_KEYSTORE_PASSWORD_FILE=/absolute/private/path/to/keystore-password.txt \
 bash kiosk/build.sh
 ```
+
+`KIOSK_KEY_ALIAS` defaults to `homehq-brymon68`. If the key password differs
+from the keystore password, set `KIOSK_KEY_PASSWORD_FILE` to its absolute private
+file path; otherwise it uses `KIOSK_KEYSTORE_PASSWORD_FILE`. Passwords are read
+from files rather than placed in command arguments.
 
 The script copies the prepared `dist/` into the APK, compiles the native sources,
 and signs `kiosk/build/homehq.apk`. It does not contact or install to a frame.
@@ -73,19 +84,26 @@ Bundled files are served inside WebView at a local HTTPS origin, so dashboard
 startup needs no host server, USB connection, or internet. Live feeds still need
 internet to refresh.
 
-Select the intended ADB transport and verify the model before installation.
-For the single USB device, expect `FRAME156` from the first command:
+On another frame still using the old package, a first installation must follow
+the migration procedure: it does not inherit calendar, WebView storage, navigation
+placement, or Android Home/accessibility settings. This owner's transfer is complete.
+
+## Update the installed app
+
+Use these commands for later updates to the personal package. Select the
+intended ADB transport and verify the model before
+installation. For the single USB device, expect `FRAME156` from the first command:
 
 ```sh
 adb -d shell getprop ro.product.model
 adb -d install -r kiosk/build/homehq.apk
-adb -d shell am start -n com.wesbos.homehq/.MainActivity
+adb -d shell am start -n com.brymon68.homehq/.MainActivity
 ```
 
 For Wi-Fi, use `adb -s '<frame-address>:5555'` in place of `adb -d` in every
 command. Get the current address from the private frame notes. An in-place update
-with the same signing identity retains app data and calendar configuration;
-do not uninstall the app to work around a signature mismatch.
+to the same package with the same signing identity retains app data and calendar
+configuration; do not uninstall an app to work around a signature mismatch.
 
 After updating, check the five views, calendar/weather status, light/blind drags,
 lock holds, garage confirmation, and standby/wake brightness. Confirm Home HQ
@@ -100,13 +118,19 @@ menu. **Home HQ navigation**, enabled in Android Accessibility settings, supplie
 floating Back and Dashboard buttons outside the app. Drag their dots to reposition
 them. The buttons hide inside Home HQ.
 
-The installed frame already uses Home HQ as Home. For a fresh app installation,
-the Home alias starts disabled; after verifying `FRAME156`, enable and select it:
+The personal app's Home alias is already enabled and selected on this frame.
+For a new installation, the alias starts disabled; after data transfer and
+verification, enable and select it with:
 
 ```sh
-adb -d shell am start -n com.wesbos.homehq/.MainActivity --ez home true
-adb -d shell cmd package set-home-activity com.wesbos.homehq/.Home
+adb -d shell am start -n com.brymon68.homehq/.MainActivity --ez home true
+adb -d shell cmd package set-home-activity com.brymon68.homehq/.Home
 ```
+
+The selected navigation service is `com.brymon68.homehq/.NavigationService`.
+Both packages use the visible label **Home HQ navigation**; identify them by
+package name. Keep the old service and Home alias disabled while its app is
+retained, so it cannot supply a second bar or appear as the alternate launcher.
 
 Standby starts after 120 seconds idle: Ambient by day, Night from 21:00 to 06:00.
 Both use 5% window brightness. Touch restores the device's normal brightness;
@@ -121,9 +145,9 @@ creation and calendar demo controls are hidden while connected. Native and
 browser caches preserve saved events, with a timestamp/status label. Date windows
 refresh at midnight and after the device clock changes.
 
-The existing calendar configuration survives an in-place update. To configure
-or change it, keep the secret URL in an ignored private file, then run from
-`dashboard/`:
+The calendar configuration was transferred and survives in-place updates of the
+same package. This helper targets **`com.brymon68.homehq`**. To configure or change
+its calendar, keep the secret URL in an ignored private file, then run from `dashboard/`:
 
 ```sh
 python3 kiosk/configure-calendar.py --usb --model FRAME156 --url-file /private/path/calendar-url.txt
@@ -153,5 +177,5 @@ python3 kiosk/tests/test-feeds.py --java-home /path/to/jdk17 --gson-jar /path/to
 Native checks use temporary files, fake HTTPS connections, and small Android API
 adapters. They exercise payload validation, size limits, cache reuse/fallback,
 timestamps, response headers, and storage failures without contacting a frame
-or a feed. `--source-dir /path/to/kiosk/src/com/wesbos/homehq` selects another
+or a feed. `--source-dir /path/to/kiosk/src/com/brymon68/homehq` selects another
 checkout for comparison.

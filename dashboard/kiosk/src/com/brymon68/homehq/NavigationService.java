@@ -1,4 +1,4 @@
-package com.wesbos.homehq;
+package com.brymon68.homehq;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;

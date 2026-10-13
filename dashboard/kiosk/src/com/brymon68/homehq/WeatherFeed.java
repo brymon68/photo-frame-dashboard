@@ -1,4 +1,4 @@
-package com.wesbos.homehq;
+package com.brymon68.homehq;
 
 import android.content.Context;
 import android.net.Uri;

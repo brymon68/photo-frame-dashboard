@@ -1,23 +1,32 @@
 # Pastigio FRAME156: current setup and operation
 
-This fork maintains the owner's working Pastigio dashboard. The installed setup
-was verified on 2026-10-12. It uses the frame's existing Android firmware and
+This fork maintains the owner's working Pastigio dashboard. The personal app was
+installed and selected on 2026-10-12. It uses the frame's existing Android firmware and
 shipped `su`; setup installed an app and changed launcher/package settings.
 No firmware or raw partitions were rewritten.
+
+Home HQ 1.13 under `com.brymon68.homehq` now uses the owner's brymon68 signing key.
+Calendar configuration, settings, and feed caches were transferred from 1.12.
+The [migration record](migrate-to-brymon68.md) describes the checks performed.
+Reboot verification and native-menu/navigation-button acceptance were not
+completed for this migration.
 
 | Component | Installed setup |
 | --- | --- |
 | Frame | Pastigio FRAME156, Rockchip RK3326, 1920×1080 |
 | Android | 8.1.0, stock FrameO.DP105F.v2026010414 firmware |
 | WebView | 106.0.5249.126 |
-| Dashboard | Home HQ 1.12, `com.wesbos.homehq` |
-| Default Home | `com.wesbos.homehq/.Home`; startup after reboot verified |
+| Dashboard | Home HQ 1.13, `com.brymon68.homehq` |
+| Default Home | `com.brymon68.homehq/.Home`; reboot verification pending |
 | Clock | Device time, `America/Denver` |
 
 Frameo (`net.frameo.frame`) and the vendor updaters
 `com.muxintu.app.mxota` and `android.rockchip.update.service` are disabled.
 Their packages were not erased; Frameo's app data remains on the frame.
 Home HQ navigation supplies floating Back and Dashboard buttons outside the app.
+The selected service is `com.brymon68.homehq/.NavigationService`. The old
+`com.wesbos.homehq` app and data remain installed, with its Home alias and
+navigation service disabled.
 
 ## Connect and identify
 
@@ -30,14 +39,14 @@ For Wi-Fi ADB:
 ```sh
 adb connect '<frame-address>:5555'
 adb -s '<frame-address>:5555' shell getprop ro.product.model
-adb -s '<frame-address>:5555' shell am start -n com.wesbos.homehq/.MainActivity
+adb -s '<frame-address>:5555' shell am start -n com.brymon68.homehq/.MainActivity
 ```
 
 For the single USB device:
 
 ```sh
 adb -d shell getprop ro.product.model
-adb -d shell am start -n com.wesbos.homehq/.MainActivity
+adb -d shell am start -n com.brymon68.homehq/.MainActivity
 ```
 
 The model must be `FRAME156` before making changes. Always select the transport:
@@ -73,8 +82,9 @@ No hardware-clock fix was installed.
 
 ## Updates and maintenance
 
-Use the [Mac kiosk build/update guide](../dashboard/kiosk/README.md). Retain the
-existing private signing key and update the app in place. A plain Vite build does
+Use the [Mac kiosk build/update guide](../dashboard/kiosk/README.md) for personal
+builds. Migration to the personal package is complete; updates must retain
+`com.brymon68.homehq` and its signing key. A plain Vite build does
 not reproduce the installed offline font/image preparation; the guide separates
 that preparation from APK packaging. Source edits alone do not update the frame.
 
