@@ -21,10 +21,10 @@ window.DATA = (function () {
   var ALL = ['alex', 'jordan', 'maya', 'otto'];
 
   var people = [
-    { id: 'alex', name: 'Wes', color: '#2D5BFF', rgb: '45 91 255', ink: '#FFFFFF', home: false },
-    { id: 'jordan', name: 'Claudia', color: '#E4007C', rgb: '228 0 124', ink: '#FFFFFF', home: false },
-    { id: 'maya', name: 'Buzzsaw', color: '#00A36C', rgb: '0 163 108', ink: '#FFFFFF', home: true },
-    { id: 'otto', name: 'Skidmark', color: '#FFB000', rgb: '255 176 0', ink: '#111111', home: true }
+    { id: 'alex', name: 'Alex', color: '#2D5BFF', rgb: '45 91 255', ink: '#FFFFFF', home: false },
+    { id: 'jordan', name: 'Jordan', color: '#E4007C', rgb: '228 0 124', ink: '#FFFFFF', home: false },
+    { id: 'maya', name: 'Maya', color: '#00A36C', rgb: '0 163 108', ink: '#FFFFFF', home: true },
+    { id: 'otto', name: 'Otto', color: '#FFB000', rgb: '255 176 0', ink: '#111111', home: true }
   ];
   var family = { id: 'family', name: 'Family', color: '#111111', rgb: '17 17 17', ink: '#FFFFFF' };
 
@@ -39,15 +39,15 @@ window.DATA = (function () {
     ev(0, '12:00', '12:45', 'Dentist', ['maya', 'jordan'], { travel: 15, loc: 'Bright Smiles Dental' }),
     ev(0, '13:00', '14:00', 'Lunch with Sam', ['alex'], { loc: 'Café Rustica' }),
     ev(0, '15:45', '16:30', 'Piano lesson', ['otto'], { travel: 12, loc: "Ms. Park's Studio", notes: 'Bring the blue theory book.' }),
-    ev(0, '16:05', '16:30', 'Drive Buzzsaw to soccer', ['jordan']),
-    ev(0, '16:25', '16:50', 'Pick up Skidmark', ['jordan'], { loc: "Ms. Park's Studio" }),
+    ev(0, '16:05', '16:30', 'Drive Maya to soccer', ['jordan']),
+    ev(0, '16:25', '16:50', 'Pick up Otto', ['jordan'], { loc: "Ms. Park's Studio" }),
     ev(0, '16:30', '18:00', 'Soccer practice', ['maya'], { travel: 20, loc: 'Lakeshore Fields', notes: 'Shin guards + water bottle. Rain likely — pack a jacket.' }),
     ev(0, '17:00', '17:30', 'Parent–teacher call', ['alex', 'jordan'], { loc: 'Zoom' }),
     ev(0, '18:30', '19:30', "Dinner at Nonna's", ALL, { travel: 20, loc: "Nonna's", notes: 'Bring the lemon cake.' }),
     ev(0, '20:00', '20:30', 'Bath + books', ['otto']),
 
     // Tomorrow → +6
-    allDay(1, 3, 'Wes in Montréal', ['alex'], { loc: 'Hotel William Gray' }),
+    allDay(1, 3, 'Alex in Montréal', ['alex'], { loc: 'Hotel William Gray' }),
     ev(1, '07:00', '07:45', 'Gym', ['jordan'], { loc: 'Iron Works' }),
     ev(1, '08:15', '08:40', 'School drop-off', ['jordan'], { travel: 10 }),
     ev(1, '10:30', '11:15', 'Vet — Biscuit', ['jordan'], { travel: 10, loc: 'Riverdale Animal Clinic' }),
@@ -91,7 +91,7 @@ window.DATA = (function () {
     if (d % 9 === 0) events.push(ev(d, '12:00', '13:00', 'Lunch meeting', ['alex']));
     if (d % 11 === 0) events.push(ev(d, '09:00', '10:00', 'Doctor', ['jordan']));
   }
-  events.push(allDay(12, 1, "Buzzsaw's birthday 🎂", ALL));
+  events.push(allDay(12, 1, "Maya's birthday 🎂", ALL));
   events.push(allDay(-8, 3, 'Cottage weekend', ALL));
 
   // Extra events for the "overloaded day" demo
@@ -155,8 +155,8 @@ window.DATA = (function () {
     { id: 'e-porch', room: 'entry', type: 'light', name: 'Porch', on: true, level: 100 },
     { id: 'g-door', room: 'entry', type: 'garage', name: 'Garage', state: 'closed' },
     { id: 'g-side', room: 'entry', type: 'lock', name: 'Side Door', locked: true },
-    { id: 'u-maya', room: 'upstairs', type: 'light', name: "Buzzsaw's Lamp", on: true, level: 30 },
-    { id: 'u-otto', room: 'upstairs', type: 'light', name: "Skidmark's Nightlight", on: false, level: 15 },
+    { id: 'u-maya', room: 'upstairs', type: 'light', name: "Maya's Lamp", on: true, level: 30 },
+    { id: 'u-otto', room: 'upstairs', type: 'light', name: "Otto's Nightlight", on: false, level: 15 },
     { id: 'u-hall', room: 'upstairs', type: 'light', name: 'Hallway', on: false, level: 60 },
     { id: 'u-bath', room: 'upstairs', type: 'light', name: 'Bathroom', on: false, level: 100 },
     { id: 'y-string', room: 'yard', type: 'light', name: 'String Lights', on: false, level: 100, flaky: true },

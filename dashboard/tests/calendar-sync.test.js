@@ -43,7 +43,8 @@ test('a configured frame replaces sample events and persists good downloads', as
   assert.equal(f.D.people.length, 1);
   assert.equal(f.D.people[0].name, 'Family');
   assert.equal(f.D.events[0].people.join(','), 'family');
-  assert.ok(f.D.devices.every(device => !/Wes|Claudia|Buzzsaw|Skidmark/.test(device.name)));
+  assert.equal(f.D.devices.find(device => device.id === 'u-maya').name, 'Bedroom Lamp');
+  assert.equal(f.D.devices.find(device => device.id === 'u-otto').name, 'Nightlight');
   assert.equal(f.D.busyExtras.length, 0);
   assert.equal(f.timers[0].ms, 300000);
   assert.equal(JSON.parse(f.storage.get(KEY)).text, feed);

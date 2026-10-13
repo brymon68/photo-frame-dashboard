@@ -5,11 +5,8 @@ installed and selected on 2026-10-12. It uses the frame's existing Android firmw
 shipped `su`; setup installed an app and changed launcher/package settings.
 No firmware or raw partitions were rewritten.
 
-Home HQ 1.13 under `com.brymon68.homehq` now uses the owner's brymon68 signing key.
-Calendar configuration, settings, and feed caches were transferred from 1.12.
-The [migration record](migrate-to-brymon68.md) describes the checks performed.
-Reboot verification and native-menu/navigation-button acceptance were not
-completed for this migration.
+Home HQ 1.13 under `com.brymon68.homehq` uses the owner's brymon68 signing key.
+Calendar configuration, saved settings, and feed caches are in place.
 
 | Component | Installed setup |
 | --- | --- |
@@ -24,9 +21,13 @@ Frameo (`net.frameo.frame`) and the vendor updaters
 `com.muxintu.app.mxota` and `android.rockchip.update.service` are disabled.
 Their packages were not erased; Frameo's app data remains on the frame.
 Home HQ navigation supplies floating Back and Dashboard buttons outside the app.
-The selected service is `com.brymon68.homehq/.NavigationService`. The old
-`com.wesbos.homehq` app and data remain installed, with its Home alias and
-navigation service disabled.
+The selected service is `com.brymon68.homehq/.NavigationService`.
+
+On-device checks for this installation covered all five views, four calendar
+modes, touch dragging and cancellation, Undo, lock/garage interactions,
+standby/Night behavior, and browser and native offline caches with recovery.
+**Reboot verification and acceptance checks for the native two-finger menu and
+floating navigation buttons remain outstanding.**
 
 ## Connect and identify
 
@@ -70,6 +71,8 @@ reconnection. Keep wall power connected when removing the USB data cable.
 - Home controls, camera/media previews, scenes, and Agents usage remain demo
   data. Light/blind dragging, lock holds, garage confirmation, and demo controls
   are retained. They are not connected to household equipment or accounts.
+- Shopping edits, demo control values, and the current view are held in memory
+  and reset when the app process restarts.
 
 Hold two fingers still for 1.5 seconds to open the native menu: launcher,
 Android settings, or Reload dashboard. Outside Home HQ, use the floating Back
@@ -83,10 +86,10 @@ No hardware-clock fix was installed.
 ## Updates and maintenance
 
 Use the [Mac kiosk build/update guide](../dashboard/kiosk/README.md) for personal
-builds. Migration to the personal package is complete; updates must retain
-`com.brymon68.homehq` and its signing key. A plain Vite build does
-not reproduce the installed offline font/image preparation; the guide separates
-that preparation from APK packaging. Source edits alone do not update the frame.
+builds. Updates must retain `com.brymon68.homehq` and its signing key. A plain
+Vite build does not reproduce the installed offline font/image preparation; the
+guide separates that preparation from APK packaging. Source edits alone do not
+update the frame.
 
 Use the [display viewer](frame-viewer.md) to inspect the actual screen from a
 browser. It uses an explicitly selected ADB transport and does not install

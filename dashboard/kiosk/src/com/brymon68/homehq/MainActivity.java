@@ -25,7 +25,6 @@ import android.webkit.WebResourceResponse;
 import android.webkit.MimeTypeMap;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 
 /**
  * Full-screen kiosk WebView for the Home HQ wall tablet.
@@ -38,7 +37,6 @@ import java.io.InputStream;
  */
 public class MainActivity extends Activity {
   static final String TAG = "HomeHQ";
-  static final String DEFAULT_URL = "https://home-dashboard.wesbos.workers.dev/";
   static final String BUNDLED_HOST = "appassets.androidplatform.net";
   static final String BUNDLED_URL = "https://" + BUNDLED_HOST + "/dashboard/index.html";
   static final long EXIT_HOLD_MS = 1500;
@@ -127,7 +125,7 @@ public class MainActivity extends Activity {
 
     String url = requestedUrl(getIntent());
     web.loadUrl(url != null ? url : getSharedPreferences("kiosk", MODE_PRIVATE)
-        .getString("url", defaultUrl()));
+        .getString("url", BUNDLED_URL));
   }
 
   @Override
@@ -164,14 +162,6 @@ public class MainActivity extends Activity {
     if (!"https".equals(uri.getScheme()) && !"http".equals(uri.getScheme())) return null;
     getSharedPreferences("kiosk", MODE_PRIVATE).edit().putString("url", url).apply();
     return url;
-  }
-
-  private String defaultUrl() {
-    try (InputStream ignored = getAssets().open("dashboard/index.html")) {
-      return BUNDLED_URL;
-    } catch (IOException absent) {
-      return DEFAULT_URL;
-    }
   }
 
   /** Only the packaged dashboard can request the fixed standby backlight level. */
