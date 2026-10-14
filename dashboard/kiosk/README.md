@@ -1,8 +1,9 @@
 # Home HQ kiosk on the Pastigio frame
 
 Home HQ packages the dashboard in a fullscreen Android WebView. This source
-builds **Home HQ 1.14, `com.brymon68.homehq`**, signed with the owner's key and
-installed as the frame's default Home app. Its navigation service is selected;
+builds **Home HQ 1.20, `com.brymon68.homehq`**, using the owner's signing key.
+Version 1.20 is installed as the frame's default Home app.
+Its navigation service is selected;
 reboot verification and native-menu/navigation-button acceptance have not been
 completed for the current installation. See the [current frame setup](../../docs/pastigio-frame156.md)
 for operation. Building alone does not update the device or change firmware.
@@ -111,8 +112,8 @@ command. Get the current address from the private frame notes. An in-place updat
 to the same package with the same signing identity retains app data and calendar
 configuration; do not uninstall an app to work around a signature mismatch.
 
-After updating, check the five views, calendar/weather status, light/blind drags,
-lock holds, garage confirmation, and standby/wake brightness. Confirm Home HQ
+After updating, check the five views, calendar/weather status, room/light states,
+climate readings, scrolling, and standby/wake brightness. Confirm Home HQ
 still resolves as Home and **Home HQ navigation** remains enabled and usable
 outside the app.
 Do not repeat firmware captures for routine app updates.
@@ -168,19 +169,108 @@ Weather uses the fixed public Open-Meteo endpoint for Albuquerque, with Fahrenhe
 temperatures, mph wind, daily highs/lows, and seven upcoming hours. Native and
 browser caches preserve the last good forecast; refresh is every 15 minutes and
 on connectivity recovery. The dashboard labels saved data during outages.
-Home controls, camera/media previews, scenes, and Agents usage remain demo data.
+Home Assistant climate and lighting are live. Home no longer displays the summary
+strip or demo camera/media panels. Hidden demo alerts and Agents usage remain
+sample data.
+
+## Home Assistant climate (1.20)
+
+The Home tab replaces its sample thermostat with one dark card per `climate.*`
+entity, showing its friendly name and current temperature in Home Assistant's
+configured units. A compact footer shows the selected mode, reported activity
+(for example, `Cool · Idle`), and target temperature. Heat/cool ranges show both
+targets when available. Current and target numbers turn palette orange while
+heating in Heat mode and palette blue while cooling in Cool mode; idle, off,
+and unavailable readings stay white. The right column scrolls when needed. The
+Today temperature uses the first device in alphabetical order. Tap a climate card
+to adjust its target with −/+ and press Apply. Supported modes are shown as
+buttons; applying a mode loads its temperature settings the next time the card
+is opened. Heat/cool devices expose both targets in range mode. Bounds and step
+sizes come from Home Assistant (1° steps when none is reported). Unavailable
+or stale devices cannot be adjusted; an off device can still have its mode changed.
+
+The bundled app performs an authenticated, read-only `GET /api/states` every
+30 seconds. See the [Home Assistant REST API](https://developers.home-assistant.io/docs/api/rest/).
+Native code filters the response before passing climate display fields to WebView.
+The server URL and bearer token live in app-private `home-assistant.json`; neither
+is bundled into the APK, JavaScript, or browser storage. Redirects are not followed.
+The last successful device list is cached privately. An unavailable device or
+failed/stale refresh displays `Unavailable` and `—` instead of old readings, and retries
+automatically. An empty successful response removes old cards.
+
+After installing the signed update, configure it from an ignored private token file:
+
+```sh
+python3 kiosk/configure-home-assistant.py --usb --model FRAME156 \
+  --url 'http://<home-assistant-address>:8123' --token-file /private/path/ha-token.txt
+```
+
+For Wi-Fi use `--serial '<frame-address>:5555'` instead of `--usb`. The helper
+verifies the model and transfers credentials over standard input into private
+app storage, with owner-only file permissions. It preserves calendar settings.
+The Home tab connects on its next refresh. Plain browser previews display
+“Connect Home Assistant” and never request private Home Assistant data.
+
+## Home Assistant rooms and lights (1.20)
+
+Home replaces the sample room/device grid and lighting scenes with the actual
+Home Assistant areas and interactive light tiles. Tiles show **On**, **Off**, or
+**Unavailable**; tap an available light to turn it on or off. Scrolling does not
+toggle lights. Pending commands show **Updating…** and block repeat taps. Today's light count uses
+the same live feed. Home shows only rooms and climate; the former top summary
+strip and sample camera/media panels are removed. Rooms with
+lights appear first, empty areas remain listed, and lights without an area appear
+under **Unassigned**. Scrolling is preserved across refreshes.
+
+The native feed uses the existing private Home Assistant configuration and a
+fixed, read-only `POST /api/template` every 30 seconds. It resolves room membership
+with Home Assistant's `area_id(entity_id)`, which accounts for entity and device
+assignments. It includes `light.*` entities and `switch.*` entities whose ID has a
+`light` or `lights` word, excluding `led` indicator switches. It does not infer
+rooms from device names or change assignments in Home Assistant. A light is
+unassigned when neither its entity nor its device has an area; giving either
+one an area in Home Assistant is reflected on the next successful refresh.
+See [Home Assistant area lookup](https://www.home-assistant.io/template-functions/area_id/)
+and the [REST API](https://developers.home-assistant.io/docs/api/rest/).
+
+Only room IDs/names, light IDs/names, room membership, and on/off/availability
+cross into WebView. Climate additionally exposes its supported modes, features,
+and temperature bounds/step. Credentials stay native. The last
+good list is cached privately. Failed or stale refreshes retain names and show
+**Unavailable**, and automatically recover; removed rooms and lights disappear
+after a successful refresh. Browser previews show a connection prompt without
+sample light data.
+
+## Home controls transport (1.20)
+
+The packaged page sends a POST to its local `/dashboard/home-assistant/command`
+endpoint, with a bounded `X-HomeHQ-Command` header because WebView interception
+cannot read request bodies. Native code requires the bundled Origin and rejects
+other methods, origins, unsupported actions, and unrelated switch entities.
+Only explicit light/switch `turn_on`/`turn_off` and climate `set_temperature` /
+`set_hvac_mode` service calls are supported. The native transport re-reads the
+entity immediately before writing to enforce availability, supported modes,
+current mode, temperature bounds, reported step, and range order.
+
+Commands never optimistically change displayed equipment state. The dashboard
+blocks duplicate taps, refreshes after the service response, and briefly retries
+reads if the device has not reported its new state. Failed or timed-out writes
+show an unconfirmed-change message and are never retried automatically. A timeout
+can occur after a device accepted the command; the refreshed state is authoritative.
+The regular 30-second refresh continues. Opening, editing, or dismissing a climate
+panel without Apply makes no service call. Browser previews remain disconnected.
 
 ## Host checks
 
 `npm test` covers feeds, synchronization, and Home control gestures. Native
-HTTPS/cache contracts use JDK 17 and the Gson JAR included in Android command-line
+HTTP(S)/cache contracts use JDK 17 and the Gson JAR included in Android command-line
 tools:
 
 ```sh
 python3 kiosk/tests/test-feeds.py --java-home /path/to/jdk17 --gson-jar /path/to/gson.jar
 ```
 
-Native checks use temporary files, fake HTTPS connections, and small Android API
+Native checks use temporary files, fake HTTP(S) connections, and small Android API
 adapters. They exercise payload validation, size limits, cache reuse/fallback,
 timestamps, response headers, and storage failures without contacting a frame
 or a feed. `--source-dir /path/to/kiosk/src/com/brymon68/homehq` selects another

@@ -13,6 +13,14 @@ import tempfile
 
 
 STUBS = {
+    'android/webkit/WebResourceRequest.java': '''
+package android.webkit;
+import android.net.Uri;
+import java.util.Map;
+public interface WebResourceRequest {
+  Uri getUrl(); String getMethod(); Map<String, String> getRequestHeaders();
+}
+''',
     'android/content/Context.java': '''
 package android.content;
 import java.io.File;
@@ -88,11 +96,17 @@ package org.json;
 import com.google.gson.*;
 public class JSONObject {
   private final JsonObject value;
+  public static final Object NULL = null;
+  public JSONObject() { value = new JsonObject(); }
+  public JSONObject put(String key, Object content) throws JSONException {
+    value.add(key, content instanceof JSONObject || content instanceof JSONArray ? JsonParser.parseString(content.toString()) : new Gson().toJsonTree(content)); return this;
+  }
+  public String toString() { return value.toString(); }
   public JSONObject(String text) throws JSONException {
     try { value = JsonParser.parseString(text).getAsJsonObject(); }
     catch (RuntimeException e) { throw new JSONException("Invalid JSON"); }
   }
-  private JSONObject(JsonObject value) { this.value = value; }
+  public JSONObject(JsonObject value) { this.value = value; }
   private JsonElement get(String key) throws JSONException {
     if (isNull(key)) throw new JSONException("Missing value");
     return value.get(key);
@@ -102,17 +116,28 @@ public class JSONObject {
   public JSONArray getJSONArray(String key) throws JSONException { return new JSONArray(get(key).getAsJsonArray()); }
   public String getString(String key) throws JSONException { return get(key).getAsString(); }
   public double getDouble(String key) throws JSONException { return get(key).getAsDouble(); }
+  public int getInt(String key) throws JSONException { return get(key).getAsInt(); }
+  public java.util.Iterator<String> keys() { return value.keySet().iterator(); }
 }
 ''',
     'org/json/JSONArray.java': '''
 package org.json;
-import com.google.gson.JsonArray;
+import com.google.gson.*;
 public class JSONArray {
   private final JsonArray value;
+  public JSONArray() { value = new JsonArray(); }
+  public JSONArray(String text) throws JSONException {
+    try { value = JsonParser.parseString(text).getAsJsonArray(); }
+    catch (RuntimeException e) { throw new JSONException("Invalid array"); }
+  }
+  public JSONArray put(JSONObject object) { value.add(JsonParser.parseString(object.toString())); return this; }
+  public JSONObject getJSONObject(int index) throws JSONException { return new JSONObject(value.get(index).toString()); }
+  public String toString() { return value.toString(); }
   public JSONArray(JsonArray value) { this.value = value; }
   public int length() { return value.size(); }
   public boolean isNull(int index) { return value.get(index).isJsonNull(); }
   public double getDouble(int index) { return value.get(index).getAsDouble(); }
+  public String getString(int index) { return value.get(index).getAsString(); }
 }
 ''',
     'com/brymon68/homehq/MainActivity.java': '''
@@ -136,15 +161,17 @@ def main():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
             sources.append(path)
-        sources += [args.source_dir / name for name in ('CalendarFeed.java', 'WeatherFeed.java')]
+        sources += [args.source_dir / name for name in ('CalendarFeed.java', 'WeatherFeed.java', 'ClimateFeed.java', 'LightsFeed.java', 'HomeAssistantControl.java')]
         helper = args.source_dir / 'CachedFeed.java'
         if helper.exists():
             sources.append(helper)
         sources.append(Path(__file__).with_name('FeedTest.java'))
+        sources.append(Path(__file__).with_name('ControlTest.java'))
         javac = args.java_home / 'bin/javac' if args.java_home else 'javac'
         java = args.java_home / 'bin/java' if args.java_home else 'java'
         subprocess.run([str(javac), '--release', '8', '-cp', str(args.gson_jar), '-d', str(root), *map(str, sources)], check=True)
         subprocess.run([str(java), '-cp', os.pathsep.join((str(root), str(args.gson_jar))), 'com.brymon68.homehq.FeedTest', str(root)], check=True)
+        subprocess.run([str(java), '-cp', os.pathsep.join((str(root), str(args.gson_jar))), 'com.brymon68.homehq.ControlTest', str(root)], check=True)
 
 
 if __name__ == '__main__':

@@ -58,21 +58,20 @@
 .tile.is-holding .hold-ring circle { stroke-dashoffset: 0; }
 .pend { position: absolute; right: 14px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink); z-index: 2; }
 
-/* climate */
-.hc-climate { background: var(--ink); color: #fff; border-radius: var(--r); padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 14px; }
-.th-main { display: flex; align-items: center; justify-content: space-between; }
-.th-btn { width: 84px; height: 84px; border-radius: 50%; background: rgba(255, 255, 255, .12); display: grid; place-items: center; }
-.th-btn:active { transform: scale(.9); background: rgba(255, 255, 255, .25); }
-.th-set { text-align: center; }
-.th-set .num { font-size: 116px; line-height: .8; letter-spacing: -.03em; display: block; }
-.th-set small { font-size: var(--fs-min); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .65; }
-.th-now { display: flex; align-items: center; justify-content: space-between; font-size: 16px; color: rgba(255, 255, 255, .75); }
-.th-now b { font-size: 22px; color: #fff; }
-.th-verb { padding: 6px 12px; border-radius: 999px; font-size: 14px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; background: rgba(255, 255, 255, .15); color: #fff; }
-.th-verb--heating { background: #FF6A1A; }
-.th-verb--cooling { background: #2D8CFF; }
-.hc-climate .seg { display: flex; }
-.hc-climate .seg button { flex: 1; padding: 0; text-align: center; }
+/* Climate tiles retain the existing dark thermostat styling. */
+.hc-right { overflow-y: auto; padding-bottom: 4px; }
+.hc-right > * { flex-shrink: 0; }
+.hc-climate { display: flex; flex-direction: column; gap: 14px; border-radius: var(--r); }
+.climate-card { background: var(--ink); color: #fff; border-radius: var(--r); padding: 20px; display: flex; flex-direction: column; gap: 18px; min-height: 162px; }
+.climate-card .label { overflow-wrap: anywhere; }
+.climate-card > .num { font-size: 92px; line-height: .85; letter-spacing: -.03em; }
+.climate-details { width: 100%; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 12px; color: rgba(255, 255, 255, .65); }
+.climate-mode, .climate-target > span { font-size: 14px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.climate-target { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
+.climate-target .num { font-size: 26px; line-height: 1; color: #fff; }
+.climate-card.is-heating .num { color: var(--amber); }
+.climate-card.is-cooling .num { color: #BFD6F2; }
+.climate-card--empty .label { font-size: 14px; }
 
 /* cameras + media */
 .cams { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
@@ -102,3 +101,33 @@
 .cam-big .tk-live { left: 20px; top: 20px; }
 .cam-big-bar .label { position: absolute; left: 24px; bottom: 20px; }
 .is-pulse { box-shadow: 0 0 0 6px var(--warm); }
+
+.room-empty { padding: 24px 0; color: var(--mute); font-size: 20px; }
+.room-h { gap: 14px; }
+.room-h h3 { min-width: 0; overflow-wrap: anywhere; }
+.room-h .label { text-align: right; flex-shrink: 0; }
+
+/* Live Home controls keep the existing card layout and colors. */
+.tile--light, button.climate-card { text-align: left; }
+.tile--light .tile-name { overflow-wrap: anywhere; }
+.tile--light .tile-state { font-size: 19px; font-weight: 700; margin-top: 8px; }
+.tile--light.is-on .tile-state { color: var(--ink); }
+.tile:disabled, button.climate-card:disabled { cursor: default; }
+.tile:disabled:active, button.climate-card:disabled:active { transform: none; }
+button.climate-card { width: 100%; touch-action: pan-y; }
+button.climate-card:not(:disabled):active { transform: scale(.98); }
+.tile:focus-visible, button.climate-card:focus-visible { outline: 3px solid var(--amber); outline-offset: -3px; }
+[aria-busy="true"] { opacity: .7; }
+.climate-control .sheet-h { padding-right: 40px; overflow-wrap: anywhere; }
+.climate-modes { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 22px; }
+.climate-modes button { flex: 1; min-width: 100px; min-height: 58px; border: 2px solid var(--ink); border-radius: 14px; font-size: 19px; font-weight: 700; }
+.climate-modes button[aria-pressed="true"] { background: var(--ink); color: white; }
+.climate-adjust { margin-top: 18px; }
+.climate-stepper { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 8px; }
+.climate-stepper button { width: 72px; height: 64px; background: var(--paper-2); border-radius: 16px; font-size: 40px; }
+.climate-stepper output { font-size: 52px; }
+.climate-limit { color: var(--mute); margin: 14px 0; }
+.climate-apply { width: 100%; min-height: 64px; margin-top: 16px; background: var(--ink); color: white; border-radius: 16px; font-size: 22px; font-weight: 700; }
+.climate-form button:disabled { opacity: .4; cursor: default; }
+.climate-modes button, .climate-stepper button, .climate-apply { text-align: center; }
+.climate-modes button { padding: 8px 12px; }

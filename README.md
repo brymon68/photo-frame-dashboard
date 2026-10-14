@@ -5,7 +5,7 @@ This repository maintains the Home HQ dashboard installed on a Pastigio FRAME156
 
 The frame runs its existing Android 8.1 firmware and WebView 106. **We replaced
 the default launcher with Home HQ; we did not replace Android or flash new
-firmware.** The installed app is Home HQ 1.14. Repository changes are
+firmware.** The installed app is Home HQ 1.20. Repository changes are
 not installed automatically.
 
 The frame uses `com.brymon68.homehq`, signed with the owner's brymon68 key, as
@@ -22,16 +22,22 @@ that session. Routine app maintenance does not require new firmware captures.
 
 - `dashboard/`: Today, Calendar, Shopping, Home controls, Agents, and standby
   displays, with tests for feeds, routing, and touch gestures.
-- `dashboard/kiosk/`: the Android WebView app, native calendar/weather transport,
+- `dashboard/kiosk/`: the Android WebView app, native calendar/weather/Home Assistant transport,
   navigation service, Mac/Linux APK build, and calendar configuration helper.
 - `scripts/frame-viewer.py`: an optional read-only browser view of the frame's
   screen through an existing ADB connection.
 - `docs/`: current Pastigio operation and [display-viewer instructions](docs/frame-viewer.md).
 
-Calendar and weather are live. Home controls, cameras, and agent usage remain
-sample data; their existing appearance, sliders, and other interactions are
-retained. Browser previews also retain the sample calendar when no private feed
-is configured.
+Calendar, weather, and Home Assistant climate and lighting data are live. Home
+shows the configured rooms and their lights with On/Off/Unavailable
+status; tap an available light to toggle it. Unassigned lights have their own section. Each climate device has a dark
+tile showing its name, current temperature, mode/activity, and target. Both feeds
+refresh every 30 seconds. Tap a climate card to adjust its target or mode and
+press Apply. Pending commands block repeat taps; failed commands refresh state
+and show a message. Home displays only live room lights and climate; its
+summary strip and demo camera/media panels have been removed. Agent usage and hidden demo alerts remain
+sample data. Browser previews retain the sample calendar and show a connection prompt
+for Home Assistant when no native feed is available.
 
 Other-device setup scripts, firmware experiments, recovery workflows, community
 catalogs, and obsolete installation logs are retired from this fork. The active
@@ -84,7 +90,7 @@ certificate are separate parts of an Android app's identity:
 
 | Property | Installed app |
 | --- | --- |
-| Version | 1.14 |
+| Version | 1.20 |
 | Package | `com.brymon68.homehq` |
 | Certificate subject | `CN=brymon68, O=Home HQ` |
 | Status | Current default launcher and navigation service |

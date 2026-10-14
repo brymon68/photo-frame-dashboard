@@ -94,15 +94,15 @@
   }
 
   function status() {
-    var lights = D.devices.filter(function (d) { return d.type === 'light' && d.on; }).length;
+    var lights = App.lights.summary(), unavailable = App.lights.counts().unavailable;
     var unlocked = D.devices.filter(function (d) { return d.type === 'lock' && !d.locked; });
     var garage = D.devices.find(function (d) { return d.type === 'garage'; });
     var secure = !unlocked.length && garage.state === 'closed';
     var secText = secure ? 'All locked' : (garage.state !== 'closed' ? 'Garage open' : unlocked[0].name + ' unlocked');
     return '<div class="label">Home</div>' +
-      '<div class="h-st-row">' + App.icon('bulb', 24) + '<b class="num">' + lights + '</b><span>lights on</span></div>' +
+      '<div class="h-st-row">' + App.icon('bulb', 24) + '<b class="num">' + lights.value + '</b><span>' + (lights.value === '—' ? App.esc(lights.detail) : 'lights on' + (unavailable ? ' · ' + unavailable + ' unavailable' : '')) + '</span></div>' +
       '<div class="h-st-row' + (secure ? '' : ' is-warn') + '">' + App.icon(secure ? 'lock' : 'unlock', 24) + '<span>' + secText + '</span></div>' +
-      '<div class="h-st-row">' + App.icon('thermo', 24) + '<b class="num">' + D.climate.current + '°</b><span>inside</span></div>';
+      '<div class="h-st-row">' + App.icon('thermo', 24) + '<b class="num">' + App.climate.temperature(App.climate.devices[0]) + '</b><span>inside</span></div>';
   }
 
   var parts = { clock: clock, weather: weather, 'hero-slot': hero, lanes: lanes, shop: shopping, status: status };
@@ -141,5 +141,7 @@
     paint(n.getMinutes() === 0 ? ['clock', 'hero-slot', 'weather', 'lanes'] : ['clock', 'hero-slot']);
   });
   App.on('weather', function () { paint(['weather']); });
+  App.on('climate', function () { paint(['status']); });
+  App.on('lights', function () { paint(['status']); });
   App.on('data', function () { if (App.current === 'home') paint(); });
 })();

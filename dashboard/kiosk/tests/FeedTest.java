@@ -29,6 +29,8 @@ public class FeedTest {
 
   private static class FakeConnection extends HttpsURLConnection {
     boolean disconnected;
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    @Override public OutputStream getOutputStream() { return output; }
     FakeConnection(URL url) { super(url); requests++; last = this; }
     @Override public int getResponseCode() { return code; }
     @Override public InputStream getInputStream() throws IOException {
@@ -76,7 +78,7 @@ public class FeedTest {
       if (protocol.equals("file") || protocol.equals("jar")) return null; // JDK/provider resources.
       return new URLStreamHandler() {
         @Override protected URLConnection openConnection(URL url) {
-          if (!protocol.equals("https")) throw new AssertionError("Only HTTPS is allowed");
+          if (!protocol.equals("https") && !protocol.equals("http")) throw new AssertionError("Only HTTP(S) is allowed");
           return new FakeConnection(url);
         }
       };
@@ -170,6 +172,103 @@ public class FeedTest {
     AtomicFile.failWrites = true; network(200, WEATHER);
     response(weather.request(weatherUri), "Weather", 200, false, "application/json", WEATHER);
     check(!Files.exists(cache), "Weather returns fresh data on a full disk");
-    System.out.println("Native feed contracts passed (" + checks + " assertions; fake HTTPS only)");
+    AtomicFile.failWrites = false;
+    ClimateFeed climate = new ClimateFeed(context);
+    Uri climateUri = Uri.parse(ORIGIN + "climate/devices.json");
+    check(climate.request(Uri.parse("https://example.com/dashboard/climate/devices.json")) == null, "Climate origin restriction");
+    check(climate.request(Uri.parse(ORIGIN.replace("https:", "http:") + "climate/devices.json")) == null, "Climate HTTPS origin restriction");
+    response(climate.request(climateUri), "Climate", 404, false, "application/json", "");
+    Path config = files.resolve("home-assistant.json");
+    Files.write(config, bytes("{\"url\":\"http://ha.test:8123\",\"token\":\"test-token\"}"));
+    String climateStates = "[{\"entity_id\":\"light.ignore\"},{\"entity_id\":\"climate.hallway\",\"state\":\"cool\","
+        + "\"attributes\":{\"friendly_name\":\"Hallway\",\"current_temperature\":73,\"temperature\":74,\"hvac_action\":\"idle\",\"private_note\":\"ignore-this\"}},"
+        + "{\"entity_id\":\"climate.bedroom\",\"state\":\"unavailable\",\"attributes\":{\"current_temperature\":66,\"temperature\":78,\"hvac_action\":\"heating\"}},{\"entity_id\":\"climate.range\",\"state\":\"heat_cool\",\"attributes\":{\"target_temp_low\":68,\"target_temp_high\":76}}]";
+    network(200, climateStates);
+    WebResourceResponse liveClimate = climate.request(climateUri);
+    String filtered = body(liveClimate);
+    check(liveClimate.status == 200, "Climate live response");
+    org.json.JSONArray devices = new org.json.JSONArray(filtered);
+    check(devices.length() == 3, "All and only climate devices returned");
+    check(devices.getJSONObject(0).getDouble("temperature") == 73, "Current temperature, not setpoint");
+    check(devices.getJSONObject(0).getString("name").equals("Hallway"), "Friendly name retained");
+    check(devices.getJSONObject(0).getString("mode").equals("cool"), "Selected HVAC mode retained");
+    check(devices.getJSONObject(0).getString("activity").equals("idle"), "Actual activity retained independently of mode");
+    check(devices.getJSONObject(0).getDouble("target") == 74, "Target separate from current temperature");
+    check(devices.getJSONObject(0).isNull("targetLow"), "Missing range remains null");
+    check(devices.getJSONObject(1).isNull("target") && devices.getJSONObject(1).isNull("activity"), "Unavailable device suppresses old targets and activity");
+    check(devices.getJSONObject(2).getDouble("targetLow") == 68 && devices.getJSONObject(2).getDouble("targetHigh") == 76, "Dual targets retained");
+    check(devices.getJSONObject(2).isNull("target") && devices.getJSONObject(2).isNull("activity"), "Optional scalar target and action stay null");
+    check(devices.getJSONObject(1).isNull("temperature"), "Unavailable device has no invented reading");
+    check(devices.getJSONObject(1).getString("name").equals("bedroom"), "Missing name fallback");
+    check(!filtered.contains("test-token") && !filtered.contains("light.ignore") && !filtered.contains("ignore-this"), "Only climate display fields leave native transport");
+    check(last.getURL().toString().equals("http://ha.test:8123/api/states"), "Only states endpoint requested");
+    check(last.getRequestMethod().equals("GET") && last.getRequestProperty("Authorization").equals("Bearer test-token"), "Authenticated GET");
+    transport("Climate", "application/json");
+    cache = files.resolve("climate-devices.json");
+    for (int error : new int[] {401, 302, 503}) {
+      network(error, "");
+      response(climate.request(climateUri), "Climate", 200, true, "application/json", filtered);
+    }
+    network(200, "{}");
+    response(climate.request(climateUri), "Climate", 200, true, "application/json", filtered);
+    network(200, ""); payload = new byte[8 * 1024 * 1024 + 1];
+    response(climate.request(climateUri), "Climate", 200, true, "application/json", filtered);
+    check(Arrays.equals(Files.readAllBytes(cache), bytes(filtered)), "Invalid climate response preserves cache");
+    network(200, "[]");
+    response(climate.request(climateUri), "Climate", 200, false, "application/json", "[]");
+    check(new String(Files.readAllBytes(cache), StandardCharsets.UTF_8).equals("[]"), "Removed devices disappear");
+    Files.delete(config);
+    prior = requests;
+    response(climate.request(climateUri), "Climate", 404, false, "application/json", "");
+    check(requests == prior, "Removed configuration never uses old credentials");
+    LightsFeed lights = new LightsFeed(context);
+    Uri lightsUri = Uri.parse(ORIGIN + "lights/rooms.json");
+    check(lights.request(Uri.parse("https://example.com/dashboard/lights/rooms.json")) == null, "Lights origin restriction");
+    check(lights.request(Uri.parse(ORIGIN.replace("https:", "http:") + "lights/rooms.json")) == null, "Lights HTTPS restriction");
+    response(lights.request(lightsUri), "Lights", 404, false, "application/json", "");
+    Files.write(config, bytes("{\"url\":\"http://ha.test:8123\",\"token\":\"test-token\"}"));
+    String roomLights = "{\"rooms\":[{\"id\":\"room\",\"name\":\"Room\"}],\"lights\":["
+        + "{\"id\":\"light.lamp\",\"name\":\"Lamp\",\"room\":\"room\",\"state\":\"on\",\"private_note\":\"omit-me\"},"
+        + "{\"id\":\"switch.ceiling_lights\",\"name\":\"Ceiling\",\"room\":null,\"state\":\"off\"},"
+        + "{\"id\":\"light.lost\",\"name\":\"Lost\",\"room\":\"deleted\",\"state\":\"unknown\"}]}";
+    network(200, roomLights);
+    WebResourceResponse liveLights = lights.request(lightsUri);
+    String safeLights = body(liveLights);
+    org.json.JSONObject lightData = new org.json.JSONObject(safeLights);
+    check(liveLights.status == 200 && lightData.getJSONArray("rooms").length() == 1, "Rooms retained");
+    check(lightData.getJSONArray("lights").length() == 3, "Light and lighting switch states retained");
+    check(lightData.getJSONArray("lights").getJSONObject(0).getString("room").equals("room"), "Room association retained");
+    check(lightData.getJSONArray("lights").getJSONObject(2).isNull("room"), "Missing room treated as unassigned");
+    check(lightData.getJSONArray("lights").getJSONObject(2).getString("state").equals("unavailable"), "Unknown is not off");
+    check(!safeLights.contains("omit-me") && !safeLights.contains("test-token"), "Only display fields leave native feed");
+    check(last.getURL().getPath().equals("/api/template") && last.getRequestMethod().equals("POST"), "Read-only template endpoint");
+    check(last.getRequestProperty("Authorization").equals("Bearer test-token"), "Lights native authentication");
+    check(new org.json.JSONObject(new String(last.output.toByteArray(), StandardCharsets.UTF_8)).getString("template").equals(LightsFeed.TEMPLATE), "Fixed template, no WebView commands");
+    transport("Lights", "application/json");
+    cache = files.resolve("lights-rooms.json");
+    for (int status : new int[] {401, 302, 503}) {
+      network(status, "");
+      response(lights.request(lightsUri), "Lights", 200, true, "application/json", safeLights);
+    }
+    for (String invalid : new String[] {"{}", "{", roomLights.replace("light.lamp", "sensor.lamp"),
+        roomLights.replace("light.lost", "light.lamp")}) {
+      network(200, invalid);
+      response(lights.request(lightsUri), "Lights", 200, true, "application/json", safeLights);
+    }
+    payload = new byte[8 * 1024 * 1024 + 1];
+    response(lights.request(lightsUri), "Lights", 200, true, "application/json", safeLights);
+    check(Arrays.equals(Files.readAllBytes(cache), bytes(safeLights)), "Invalid lights never replace cache");
+    network(200, "{\"rooms\":[],\"lights\":[]}");
+    response(lights.request(lightsUri), "Lights", 200, false, "application/json", "{\"rooms\":[],\"lights\":[]}");
+    Files.delete(cache); network(503, "");
+    response(lights.request(lightsUri), "Lights", 503, true, "application/json", "");
+    AtomicFile.failWrites = true; network(200, roomLights);
+    response(lights.request(lightsUri), "Lights", 200, false, "application/json", safeLights);
+    check(!Files.exists(cache), "Lights work when storage is full");
+    AtomicFile.failWrites = false;
+    Files.delete(config); prior = requests;
+    response(lights.request(lightsUri), "Lights", 404, false, "application/json", "");
+    check(requests == prior, "Lights configuration removal clears credentials");
+    System.out.println("Native feed contracts passed (" + checks + " assertions; fake HTTP(S) only)");
   }
 }

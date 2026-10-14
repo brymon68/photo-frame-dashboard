@@ -5,7 +5,7 @@ installed and selected on 2026-10-12. It uses the frame's existing Android firmw
 shipped `su`; setup installed an app and changed launcher/package settings.
 No firmware or raw partitions were rewritten.
 
-Home HQ 1.14 under `com.brymon68.homehq` uses the owner's brymon68 signing key.
+The Home controls update was installed on 2026-10-13. Home HQ 1.20 under `com.brymon68.homehq` uses the owner's brymon68 signing key.
 Calendar configuration, saved settings, and feed caches are in place.
 
 | Component | Installed setup |
@@ -13,7 +13,7 @@ Calendar configuration, saved settings, and feed caches are in place.
 | Frame | Pastigio FRAME156, Rockchip RK3326, 1920×1080 |
 | Android | 8.1.0, stock FrameO.DP105F.v2026010414 firmware |
 | WebView | 106.0.5249.126 |
-| Dashboard | Home HQ 1.14, `com.brymon68.homehq` |
+| Dashboard | Home HQ 1.20, `com.brymon68.homehq` |
 | Default Home | `com.brymon68.homehq/.Home`; reboot verification pending |
 | Clock | Device time, `America/Denver` |
 
@@ -70,9 +70,25 @@ reconnection. Keep wall power connected when removing the USB data cable.
 - One shared Google family calendar is read-only and refreshes every five
   minutes. Albuquerque weather refreshes every 15 minutes in Fahrenheit/mph.
   Both retain saved data during outages and label it accordingly.
-- Home controls, camera/media previews, scenes, and Agents usage remain demo
-  data. Light/blind dragging, lock holds, garage confirmation, and demo controls
-  are retained. They are not connected to household equipment or accounts.
+- Home Assistant climate temperatures are live and refresh every 30 seconds.
+  Home shows one dark tile per climate entity, with its name, current
+  temperature, mode/activity, and target temperature; the column scrolls for additional devices. Missing or stale readings
+  show `—`. Current and target numbers turn orange during active heating in Heat
+  mode and blue during active cooling in Cool mode; idle readings stay white.
+  Tap a card for target −/+ controls and supported mode buttons, then press Apply.
+  Apply a mode first to load its temperature settings; heat/cool ranges have
+  separate heating and cooling targets. Unavailable devices stay disabled.
+- Home's rooms and light tiles use live Home Assistant areas and light states,
+  refreshing every 30 seconds. Lighting switches are included; their LED
+  indicators are excluded. Tap a light tile to turn it on or off. Tiles show On,
+  Off, Unavailable, or Updating… while a command is pending. Repeat taps are
+  blocked during updates; failed commands show a message and refresh the state.
+  Lights without a Home Assistant room assignment appear under Unassigned.
+  The Today light count uses the same feed. Home now shows only room lights and
+  climate: the top summary strip, sample cameras, and media have been removed.
+  Sample lighting scenes, sliders, and bulk light actions are also absent.
+- Agents usage and the hidden demo drawer's alerts remain sample data and are
+  not connected to household equipment or accounts.
 - Shopping edits, demo control values, and the current view are held in memory
   and reset when the app process restarts.
 

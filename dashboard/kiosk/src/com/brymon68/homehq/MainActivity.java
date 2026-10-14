@@ -46,6 +46,9 @@ public class MainActivity extends Activity {
   private WebView web;
   private CalendarFeed calendarFeed;
   private WeatherFeed weatherFeed;
+  private ClimateFeed climateFeed;
+  private LightsFeed lightsFeed;
+  private HomeAssistantControl homeAssistantControl;
   private final Handler handler = new Handler(Looper.getMainLooper());
   private final int[] exitIds = new int[2];
   private final float[] exitX = new float[2];
@@ -88,6 +91,9 @@ public class MainActivity extends Activity {
     web = new WebView(this);
     calendarFeed = new CalendarFeed(this);
     weatherFeed = new WeatherFeed(this);
+    climateFeed = new ClimateFeed(this);
+    lightsFeed = new LightsFeed(this);
+    homeAssistantControl = new HomeAssistantControl(this);
     WebSettings s = web.getSettings();
     s.setJavaScriptEnabled(true);
     s.setDomStorageEnabled(true);
@@ -105,10 +111,16 @@ public class MainActivity extends Activity {
 
       @Override
       public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+        WebResourceResponse command = homeAssistantControl.request(request);
+        if (command != null) return command;
         WebResourceResponse calendar = calendarFeed.request(request.getUrl());
         if (calendar != null) return calendar;
         WebResourceResponse weather = weatherFeed.request(request.getUrl());
         if (weather != null) return weather;
+        WebResourceResponse climate = climateFeed.request(request.getUrl());
+        if (climate != null) return climate;
+        WebResourceResponse lights = lightsFeed.request(request.getUrl());
+        if (lights != null) return lights;
         return bundledAsset(request.getUrl());
       }
 

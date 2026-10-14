@@ -129,3 +129,18 @@ test('standby recovers when the device clock jumps across the schedule', () => {
   f.clock('2026-10-12T23:00:00-06:00'); f.tick();
   assert.equal(f.App.mode, 'night');
 });
+
+test('preserves installed standby transitions at nightfall and dawn without interaction', () => {
+  const f = fixture(); f.view('home'); f.App.start();
+  f.App.setTime(20, 59); f.App.setMode('ambient'); f.tick();
+  assert.equal(f.App.mode, 'ambient');
+  f.App.setTime(21, 0); f.tick();
+  assert.equal(f.App.mode, 'night');
+  f.App.setTime(5, 59); f.tick();
+  assert.equal(f.App.mode, 'night');
+  f.App.setTime(6, 0); f.tick();
+  assert.equal(f.App.mode, 'ambient');
+  f.App.setMode('nightdash'); f.tick();
+  assert.equal(f.App.mode, 'day');
+  assert.equal(f.standby.at(-1), false);
+});

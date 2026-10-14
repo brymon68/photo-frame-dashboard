@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 import javax.net.ssl.HttpsURLConnection;
 
-/** Bounded HTTPS downloads with a last-good, atomic disk cache. */
+/** Bounded downloads with an atomic disk cache; default transport is HTTPS-only. */
 abstract class CachedFeed {
   private final AtomicFile cache;
   private final String name;
@@ -56,7 +56,7 @@ abstract class CachedFeed {
     }
   }
 
-  private byte[] download(String address) throws IOException {
+  byte[] download(String address) throws IOException {
     HttpsURLConnection connection = (HttpsURLConnection) new URL(address).openConnection();
     connection.setConnectTimeout(10000); connection.setReadTimeout(15000);
     connection.setInstanceFollowRedirects(false); connection.setUseCaches(false);

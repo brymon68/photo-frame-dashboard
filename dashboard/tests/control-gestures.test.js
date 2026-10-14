@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { climateTemperature, climateDetails } from '../js/climate-feed.js';
+import { parseLights, lightStatus, lightCounts } from '../js/lights-feed.js';
 
 const script = readFileSync(new URL('../js/views/control.js', import.meta.url), 'utf8');
 
@@ -25,9 +27,9 @@ class Element {
   }
   set innerHTML(html) {
     this.html = html;
-    this.tiles = Array.from(html.matchAll(/<div class="(tile [^"]+)" data-dev="([^"]+)"/g), match => {
+    this.tiles = Array.from(html.matchAll(/<button type="button" class="(tile [^"]+)" data-(dev|light)="([^"]+)"/g), match => {
       const tile = new Element(this.width);
-      tile.dataset.dev = match[2];
+      tile.dataset[match[2]] = match[3];
       tile.classes = new Set(match[1].split(' '));
       tile.parts.set('.tile-state', { textContent: '' });
       tile.parentNode = this;
@@ -36,10 +38,10 @@ class Element {
   }
   get firstChild() { return this.tiles[0]; }
   querySelector(selector) {
-    const id = selector.match(/^\[data-dev="([^"]+)"\]$/);
-    return id ? this.tiles.find(tile => tile.dataset.dev === id[1]) : this.parts.get(selector) || null;
+    const id = selector.match(/^\[data-(dev|light)="([^"]+)"\]$/);
+    return id ? this.tiles.find(tile => tile.dataset[id[1]] === id[2]) : this.parts.get(selector) || null;
   }
-  querySelectorAll(selector) { return selector === '[data-dev]' ? this.tiles : []; }
+  querySelectorAll(selector) { return selector === '[data-dev]' ? this.tiles.filter(tile => tile.dataset.dev) : []; }
   replaceChild(next, old) {
     this.tiles.splice(this.tiles.indexOf(old), 1, next);
     next.width = old.width;
@@ -68,10 +70,14 @@ function fixture(scale = 1) {
   stage.height = 800 * scale;
   for (const cls of ['sum', 'scenes', 'rooms', 'climate', 'cams', 'media']) root.parts.set('.hc-' + cls, new Element(200 * scale));
   let view, sheet, now = 10000;
+  const handlers = {};
   class Clock extends Date { static now() { return now; } }
   const App = {
     register: (name, registered) => { view = registered; },
-    icon: () => '', img: () => '', emit() {},
+    icon: () => '', img: () => '', emit: name => handlers[name]?.(), on: (name, fn) => { handlers[name] = fn; },
+    esc: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+    homeControls: { pending: {}, canLight: d => lightStatus(d) !== 'Unavailable', canClimate: d => d.mode !== 'unavailable', toggleLight: id => toasts.push({ toggle: id }), openClimate: id => toasts.push({ climate: id }) },
+    climate: { devices: [], temperature: climateTemperature, details: climateDetails, label: () => 'Connect Home Assistant' },
     $: () => stage, $$: (selector, el) => el.querySelectorAll(selector),
     hold: (el, ms, callbacks) => { el.hold = { ms, ...callbacks }; },
     toast: (html, opts) => toasts.push({ html, ...opts }),
@@ -89,6 +95,15 @@ function fixture(scale = 1) {
       if (opts.onMount) opts.onMount(sheet, sheet.close);
     }
   };
+  App.lights = {
+    ...parseLights({ rooms: [{ id: 'room', name: 'Room' }, { id: 'empty', name: 'Empty' }], lights: [
+      { id: 'light.lamp', name: 'Lamp', room: 'room', state: 'on' },
+      { id: 'switch.ceiling_lights', name: 'Ceiling', room: 'room', state: 'off' },
+      { id: 'light.orphan', name: '<img src=x>', room: null, state: 'unavailable' }
+    ] }),
+    status: lightStatus, counts: list => lightCounts(list || App.lights.lights),
+    summary: () => ({ value: 1, detail: '1 on · 1 unavailable' }), label: () => 'No lights'
+  };
   vm.runInNewContext(script, {
     window: { DATA: data }, App, Date: Clock,
     document: { createElement: () => new Element() },
@@ -99,7 +114,7 @@ function fixture(scale = 1) {
   return {
     App, data, root, timers, toasts,
     show: () => view.show(root),
-    tile: (id, box = root.parts.get('.hc-rooms')) => box.querySelector('[data-dev="' + id + '"]'),
+    tile: (id, box = sheet || root.parts.get('.hc-rooms')) => box.querySelector('[data-dev="' + id + '"]'),
     device: id => data.devices.find(d => d.id === id),
     click: (selector, dataset) => root.fire('click', { target: { closest: match => match === selector ? { dataset } : null } }),
     get sheet() { return sheet; },
@@ -113,110 +128,42 @@ function drag(tile, distance, end = 'pointerup') {
   tile.fire(end);
 }
 
-test('light and blind taps toggle, preserving remembered light brightness', () => {
-  const f = fixture();
-  drag(f.tile('light'), 10); // Ten pixels remains a tap, not a drag.
-  assert.equal(f.device('light').on, false);
-  assert.equal(f.device('light').level, 40);
-  drag(f.tile('light'), 0);
-  assert.equal(f.device('light').on, true);
-  assert.equal(f.device('light').level, 40);
-  drag(f.tile('off'), 0);
-  assert.equal(f.device('off').level, 100);
-  drag(f.tile('blind'), 0);
-  assert.equal(f.device('blind').pos, 0);
-  drag(f.tile('blind'), 0);
-  assert.equal(f.device('blind').pos, 100);
-});
-
-test('horizontal drags use rendered tile width and clamp light and blind levels', () => {
-  for (const scale of [1, 0.5]) {
-    const f = fixture(scale), tile = f.tile('light');
-    tile.fire('pointerdown', { clientX: 100 });
-    tile.fire('pointermove', { clientX: 100 + 50 * scale });
-    assert.equal(tile.style['--lvl'], '65%');
-    assert.equal(tile.querySelector('.tile-state').textContent, '65%');
-    assert.equal(tile.classList.contains('is-drag'), true);
-    assert.equal(tile.captured, 1);
-    tile.fire('pointerup');
-    assert.equal(f.device('light').level, 65);
-    assert.equal(tile.classList.contains('is-drag'), false);
-    drag(f.tile('light'), -500);
-    assert.equal(f.device('light').on, false);
-    assert.equal(f.device('light').level, 65);
-    drag(f.tile('light'), 40 * scale);
-    assert.equal(f.device('light').level, 20); // Off lights start at zero.
-    drag(f.tile('blind'), 500);
-    assert.equal(f.device('blind').pos, 100);
-    drag(f.tile('blind'), -500);
-    assert.equal(f.device('blind').pos, 0);
+test('Home renders live light buttons and explicit unavailable states', () => {
+  const f = fixture(), rooms = f.root.parts.get('.hc-rooms');
+  assert.match(rooms.html, /data-light="light.lamp"/);
+  assert.match(rooms.html, /data-light="switch.ceiling_lights"/);
+  assert.match(rooms.html, />On</);
+  assert.match(rooms.html, />Off</);
+  assert.match(rooms.html, />Unavailable</);
+  assert.match(rooms.html, /Unassigned/);
+  assert.match(rooms.html, /No lights/);
+  assert.match(rooms.html, /&lt;img/);
+  assert.doesNotMatch(rooms.html, /data-dev=|tile-fill|<img/);
+  assert.doesNotMatch(f.root.html, /hc-scenes/);
+  for (const tile of rooms.tiles) {
+    drag(tile, 100);
+    tile.fire('click');
+    assert.deepEqual(tile.listeners, {});
   }
+  f.click('[data-light]', { light: 'light.lamp' });
+  assert.equal(f.toasts[0].toggle, 'light.lamp');
+  assert.match(rooms.html, /aria-pressed="true"/);
+  assert.match(rooms.html, /data-light="light.orphan"[^>]+disabled/);
+  assert.equal(f.App.lights.lights.find(l => l.id === 'light.lamp').state, 'on');
 });
 
-test('cancelled light drags restore the tile without committing and remain usable', () => {
-  const f = fixture(), old = f.tile('light');
-  drag(old, 60, 'pointercancel');
-  assert.equal(f.device('light').level, 40);
-  assert.equal(old.classList.contains('is-drag'), false);
-  old.fire('pointerup');
-  assert.equal(f.device('light').level, 40);
-  assert.notEqual(f.tile('light'), old);
-  drag(f.tile('light'), 60);
-  assert.equal(f.device('light').level, 70);
-});
-
-test('selective paints preserve active drags and full paints retain room scroll', () => {
-  const f = fixture(), tile = f.tile('light'), rooms = f.root.parts.get('.hc-rooms');
+test('Home only renders live rooms and climate, preserving room scroll across updates', () => {
+  const f = fixture(), rooms = f.root.parts.get('.hc-rooms');
+  assert.doesNotMatch(f.root.html, /hc-sum|hc-scenes|hc-cams|hc-media/);
+  assert.match(f.root.html, /hc-rooms/);
+  assert.match(f.root.html, /hc-climate/);
   rooms.scrollTop = 137;
-  tile.fire('pointerdown', { clientX: 100 });
-  tile.fire('pointermove', { clientX: 150 });
-  f.click('[data-temp]', { temp: '0.5' });
-  f.click('[data-play]', {});
-  drag(f.tile('blind'), 20);
-  assert.equal(f.tile('light'), tile);
-  assert.equal(tile.style['--lvl'], '65%');
+  f.App.lights.lights.find(l => l.id === 'light.lamp').state = 'off';
+  f.App.emit('lights');
+  assert.doesNotMatch(rooms.html, /is-on/);
   assert.equal(rooms.scrollTop, 137);
-  tile.fire('pointerup');
-  assert.equal(f.device('light').level, 65);
   f.show();
   assert.equal(rooms.scrollTop, 137);
-  drag(f.tile('light'), 20);
-  assert.equal(f.device('light').level, 75);
-});
-
-test('sheet sliders update both copies and bulk light undo restores state', () => {
-  const f = fixture();
-  f.click('[data-sum]', { sum: 'lights' });
-  const oldMain = f.tile('light'), oldSheet = f.tile('light', f.sheet);
-  drag(oldSheet, 60);
-  assert.equal(f.device('light').level, 70);
-  assert.notEqual(f.tile('light'), oldMain);
-  assert.notEqual(f.tile('light', f.sheet), oldSheet);
-  drag(f.tile('light', f.sheet), -20);
-  assert.equal(f.device('light').level, 60);
-  f.sheet.querySelector('[data-alloff]').onclick();
-  assert.equal(f.device('light').on, false);
-  assert.equal(f.sheet.closed, true);
-  f.toasts.at(-1).undo();
-  assert.equal(f.device('light').on, true);
-  assert.equal(f.device('off').on, false);
-});
-
-test('locks require the hold callback and ignore the click immediately after unlocking', () => {
-  const f = fixture(), tile = f.tile('lock');
-  assert.equal(tile.hold.ms, 1000);
-  assert.equal(tile.hold.enabled(), true);
-  tile.fire('click');
-  tile.hold.cancel();
-  assert.equal(f.device('lock').locked, true);
-  tile.hold.done();
-  assert.equal(f.device('lock').locked, false);
-  f.tile('lock').fire('click');
-  assert.equal(f.device('lock').locked, false);
-  f.advance(801);
-  assert.equal(f.tile('lock').hold.enabled(), false);
-  f.tile('lock').fire('click');
-  assert.equal(f.device('lock').locked, true);
 });
 
 test('garage requires a completed slide at either display scale', () => {
@@ -252,4 +199,26 @@ test('cancelling a garage slide clears progress and cannot confirm on the next t
   assert.equal(f.device('g-door').state, 'closed');
   drag(knob, 400);
   assert.equal(f.device('g-door').state, 'opening');
+});
+
+test('Home renders one climate control per device and escapes names', () => {
+  const f = fixture();
+  f.App.climate.devices = [
+    { id: 'climate.hallway', name: 'Hallway', temperature: 73, mode: 'cool', activity: 'idle', target: 74 },
+    { id: 'climate.bedroom', name: '<img src=x onerror=alert(1)>', temperature: null }
+  ];
+  f.show();
+  const html = f.root.parts.get('.hc-climate').html;
+  assert.equal((html.match(/data-climate=/g) || []).length, 2);
+  assert.match(html, /<button/);
+  f.click('[data-climate]', { climate: 'climate.hallway' });
+  assert.equal(f.toasts[0].climate, 'climate.hallway');
+  assert.match(html, /Hallway/);
+  assert.match(html, /73°/);
+  assert.match(html, /Cool · Idle/);
+  assert.match(html, /Target/);
+  assert.match(html, /74°/);
+  assert.match(html, /&lt;img/);
+  assert.match(html, /—/);
+  assert.doesNotMatch(html, /data-temp|data-tmode|Set to|humidity|<img/);
 });
