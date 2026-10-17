@@ -53,7 +53,8 @@ final class LightsFeed extends CachedFeed {
       + "{% for s in states.light | list + states.switch | list %}"
       + "{% if s.domain == 'light' or (s.entity_id is search('(^|[._])lights?(_|$)') "
       + "and not s.entity_id is search('(^|[._])led(_|$)')) %}"
-      + "{% set ns.lights = ns.lights + [dict(id=s.entity_id, name=s.name, room=area_id(s.entity_id), state=s.state)] %}"
+      + "{% set ns.lights = ns.lights + [dict(id=s.entity_id, name=s.name, room=area_id(s.entity_id), state=s.state, "
+      + "brightness=s.attributes.get('brightness'), supported_color_modes=s.attributes.get('supported_color_modes', []))] %}"
       + "{% endif %}{% endfor %}{{ dict(rooms=ns.rooms, lights=ns.lights) | to_json }}";
 
   @Override String mimeType(int status) { return "application/json"; }
@@ -76,8 +77,17 @@ final class LightsFeed extends CachedFeed {
         String id = light.getString("id"), state = light.getString("state");
         if (!id.matches("(?:light|switch)\\.[a-z0-9_]+") || !lightIds.add(id)) throw new IOException("Invalid light");
         String room = light.isNull("room") ? null : light.getString("room");
+        boolean dimmable = id.startsWith("light.") && HomeAssistantControl.supportsBrightness(light);
+        Object level = JSONObject.NULL;
+        if ("off".equals(state)) level = 0;
+        else if (dimmable && !light.isNull("brightness")) {
+          double brightness = light.getDouble("brightness");
+          if (!Double.isFinite(brightness) || brightness < 0 || brightness > 255) throw new IOException("Invalid brightness");
+          level = (int) Math.round(brightness * 100 / 255);
+        }
         safeLights.put(new JSONObject().put("id", id).put("name", light.getString("name"))
             .put("room", room != null && roomIds.contains(room) ? room : JSONObject.NULL)
+            .put("dimmable", dimmable).put("level", level)
             .put("state", "on".equals(state) || "off".equals(state) ? state : "unavailable"));
       }
       return new JSONObject().put("rooms", safeRooms).put("lights", safeLights).toString().getBytes(StandardCharsets.UTF_8);

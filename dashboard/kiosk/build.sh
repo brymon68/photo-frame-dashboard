@@ -28,6 +28,9 @@ if [[ "$KEY_PASS_FILE" != "$KS_PASS_FILE" ]]; then
 fi
 
 rm -rf build && mkdir -p build/gen build/classes
+python3 fetch-dependencies.py
+CAMERA_LIBS=(lib/Java-WebSocket-1.6.0.jar lib/slf4j-api-2.0.13.jar lib/slf4j-nop-2.0.13.jar)
+CAMERA_CP=$(IFS=:; echo "${CAMERA_LIBS[*]}")
 
 ASSETS=()
 if [ "${BUNDLE_DASHBOARD:-1}" = "1" ]; then
@@ -37,17 +40,20 @@ if [ "${BUNDLE_DASHBOARD:-1}" = "1" ]; then
   fi
   mkdir -p build/assets/dashboard
   cp -R ../dist/. build/assets/dashboard/
+  cp THIRD-PARTY-NOTICES.txt build/assets/dashboard/
   ASSETS=(-A build/assets)
 fi
 
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link -o build/base.apk -I "$JAR" --manifest AndroidManifest.xml build/res.zip \
-  --java build/gen --min-sdk-version 23 --target-sdk-version 23 --version-code 21 --version-name 1.20 "${ASSETS[@]}"
+  --java build/gen --min-sdk-version 23 --target-sdk-version 23 --version-code 31 --version-name 1.30 "${ASSETS[@]}"
 
-javac -nowarn -source 8 -target 8 -classpath "$JAR" -d build/classes \
+javac -nowarn -source 8 -target 8 -classpath "$JAR:$CAMERA_CP" -d build/classes \
   src/com/brymon68/homehq/*.java build/gen/com/brymon68/homehq/R.java
 
-"$BT/d8" --min-api 23 --lib "$JAR" --output build $(find build/classes -name '*.class')
+# Build-tools 34's D8 crashes on the SLF4J enum metadata. Use the pinned Google
+# compiler for dexing only; the existing SDK still packages and signs the APK.
+java -cp lib/r8-8.7.18.jar com.android.tools.r8.D8 --min-api 23 --lib "$JAR" --output build $(find build/classes -name '*.class') "${CAMERA_LIBS[@]}"
 (cd build && zip -qj base.apk classes.dex)
 "$BT/zipalign" -f 4 build/base.apk build/aligned.apk
 

@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const script = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 
 function fixture() {
-  const elements = new Map(), standby = [];
+  const elements = new Map(), standby = [], standbyCalls = [], listeners = {};
   let now = +new Date('2026-10-12T15:18:00-06:00');
   class Clock extends Date {
     constructor(...args) { super(...(args.length ? args : [now])); }
@@ -21,14 +21,14 @@ function fixture() {
     return elements.get(selector);
   }
   const location = { hash: '' }, window = {
-    DATA: {}, HomeHQ: { setStandby: value => standby.push(value) },
+    DATA: {}, HomeHQ: { setStandby: (value, night) => { standby.push(value); standbyCalls.push({ standby: value, night }); } },
     innerWidth: 1920, innerHeight: 1080, addEventListener() {}
   };
   vm.runInNewContext(script, {
     window, location, Date: Clock,
     history: { replaceState: (_, __, hash) => { location.hash = hash; } },
     document: {
-      querySelector: element, querySelectorAll: () => [], addEventListener() {},
+      querySelector: element, querySelectorAll: () => [], addEventListener(name, fn) { listeners[name] = fn; },
       documentElement: { hasAttribute: () => true }
     },
     setTimeout() {}, clearTimeout() {}, setInterval(fn) { interval = fn; }
@@ -45,8 +45,8 @@ function fixture() {
     return calls;
   }
   return {
-    App, view, element, standby, advance: ms => { now += ms; },
-    start() { view('home'); App.on('mode', App.resetIdle); App.start(); },
+    App, view, element, standby, standbyCalls, listeners, advance: ms => { now += ms; },
+    start() { view('home'); App.start(); },
     tick(seconds = 1) { for (let i = 0; i < seconds; i++) { now += 1000; interval(); } },
     clock(value) { now = +new Date(value); }
   };
@@ -63,6 +63,21 @@ test('explicit rerenders refresh cached metadata so the next visit can resume', 
   assert.equal(calls[1].el, f.element('#view-home'));
 });
 
+test('replacing or closing a sheet releases its resources exactly once', () => {
+  const f = fixture(), layer = f.element('#sheetLayer'), closed = [];
+  let open = false;
+  layer.classList = { add() { open = true; }, remove() { open = false; }, contains() { return open; } };
+  layer.querySelector = () => ({ addEventListener() {} });
+  layer.querySelectorAll = () => [];
+  f.App.icon = () => '';
+  f.App.sheet('first', { onClose() { closed.push('first'); } });
+  f.App.sheet('second', { onClose() { closed.push('second'); } });
+  assert.deepEqual(closed, ['first']);
+  f.App.closeSheet(); f.App.closeSheet();
+  assert.deepEqual(closed, ['first', 'second']);
+  assert.equal(layer.innerHTML, '');
+});
+
 test('data changes rebuild hidden views once while clean views retain their DOM', () => {
   const f = fixture(), home = f.view('home'), control = f.view('control');
   f.App.go('home');
@@ -75,72 +90,125 @@ test('data changes rebuild hidden views once while clean views retain their DOM'
   assert.deepEqual(control.map(c => c.action), ['show', 'hide', 'resume', 'hide']);
 });
 
-test('standby bridge dims only ambient/night and night starts at 9 PM', () => {
-  const f = fixture();
-  for (const [hour, minute, night] of [[20,59,false],[21,0,true],[23,59,true],[0,0,true],[5,59,true],[6,0,false]]) {
-    f.App.setTime(hour, minute);
-    assert.equal(f.App.isNight(), night);
+test('idle dims the current view without navigation, rerendering or closing a panel', () => {
+  for (const name of ['home', 'calendar', 'shopping', 'control', 'agents']) {
+    const f = fixture(); f.start(); const calls = f.view(name); f.App.go(name);
+    let closed = false; f.App.closeSheet = () => { closed = true; };
+    f.App.resetIdle(); f.tick(119);
+    assert.equal(f.App.mode, 'day');
+    f.tick(); assert.equal(f.App.mode, 'dim');
+    assert.equal(f.App.current, name); assert.equal(closed, false);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(f.standby, [true]);
+    f.tick(200); assert.deepEqual(f.standby, [true]);
   }
-  for (const mode of ['ambient', 'day', 'night', 'nightdash']) {
-    f.App.setMode(mode);
-    assert.equal(f.element('#stage').dataset.mode, mode);
+});
+
+test('touch, keyboard and wheel restore brightness while retaining the view', () => {
+  for (const input of ['pointerdown', 'keydown', 'wheel']) {
+    const f = fixture(); f.start(); f.view('control'); f.App.go('control');
+    f.App.resetIdle(); f.tick(120);
+    f.listeners[input]({ pointerId: 1 });
+    assert.equal(f.App.mode, 'day'); assert.equal(f.App.current, 'control');
+    assert.deepEqual(f.standby, [true, false]);
   }
-  assert.deepEqual(f.standby, [true, false, true, false]);
 });
 
-test('existing standby follows both schedule boundaries without a touch', () => {
+test('dimming waits until a held touch ends, including cancellation', () => {
+  for (const end of ['pointerup', 'pointercancel']) {
+    const f = fixture(); f.start();
+    f.listeners.pointerdown({ pointerId: 7 }); f.tick(180);
+    assert.equal(f.App.mode, 'day');
+    f.listeners[end]({ pointerId: 7 });
+    f.tick(119); assert.equal(f.App.mode, 'day');
+    f.tick(); assert.equal(f.App.mode, 'dim');
+  }
+});
+
+test('nightfall, dawn and clock corrections never replace the normal dashboard', () => {
+  const f = fixture(); f.start(); f.view('control'); f.App.go('control');
+  f.App.resetIdle(); f.tick(120);
+  for (const time of ['2026-10-12T21:00:00-06:00', '2026-10-13T06:00:00-06:00', '2026-10-13T23:00:00-06:00']) {
+    f.clock(time); f.tick(); assert.equal(f.App.mode, 'dim'); assert.equal(f.App.current, 'control');
+  }
+  f.App.resetIdle(); f.tick(119); assert.equal(f.App.mode, 'day');
+  f.tick(); assert.equal(f.App.mode, 'dim');
+});
+
+test('entering idle chooses the daytime or overnight brightness and touch restores normal brightness', () => {
+  for (const [time, night] of [
+    ['2026-10-12T12:00:00-06:00', false],
+    ['2026-10-12T22:00:00-06:00', true],
+    ['2026-10-13T04:00:00-06:00', true],
+    ['2026-10-13T05:00:00-06:00', false]
+  ]) {
+    const f = fixture(); f.start();
+    const calls = f.view('control'); f.App.go('control');
+    f.clock(time); f.App.resetIdle(); f.tick(120);
+    assert.equal(f.App.mode, 'dim');
+    assert.deepEqual(f.standbyCalls, [{ standby: true, night }]);
+    f.listeners.pointerdown({ pointerId: 7 });
+    assert.equal(f.App.mode, 'day');
+    assert.deepEqual(f.standby, [true, false]);
+    assert.deepEqual(f.standbyCalls, [{ standby: true, night }, { standby: false, night: false }]);
+    assert.equal(f.App.current, 'control');
+    assert.equal(calls.length, 1);
+  }
+});
+
+test('idle brightness changes exactly at 21:00 and 05:00 without rebuilding views or closing panels', () => {
+  for (const [time, beforeNight, afterNight] of [
+    ['2026-10-12T20:57:59-06:00', false, true],
+    ['2026-10-13T04:57:59-06:00', true, false]
+  ]) {
+    const f = fixture(); f.start();
+    const calls = f.view('control'), modes = [];
+    f.App.go('control'); f.App.on('mode', mode => modes.push(mode));
+    let closed = 0; f.App.closeSheet = () => { closed++; };
+    f.clock(time); f.App.resetIdle(); f.tick(120);
+    assert.equal(f.App.now().getMinutes(), 59);
+    assert.equal(f.App.now().getSeconds(), 59);
+    assert.deepEqual(f.standbyCalls, [{ standby: true, night: beforeNight }]);
+    f.tick();
+    assert.deepEqual(f.standbyCalls, [
+      { standby: true, night: beforeNight }, { standby: true, night: afterNight }
+    ]);
+    f.tick(60);
+    assert.equal(f.standbyCalls.length, 2);
+    assert.equal(f.App.mode, 'dim');
+    assert.equal(f.App.current, 'control');
+    assert.equal(calls.length, 1);
+    assert.equal(closed, 0);
+    assert.deepEqual(modes, ['dim']);
+  }
+});
+
+test('active dashboard keeps normal brightness through both schedule boundaries', () => {
+  for (const time of ['2026-10-12T20:59:59-06:00', '2026-10-13T04:59:59-06:00']) {
+    const f = fixture(); f.start();
+    const calls = f.view('control'), modes = [];
+    f.App.go('control'); f.App.on('mode', mode => modes.push(mode));
+    f.clock(time); f.App.resetIdle(); f.tick();
+    assert.equal(f.App.mode, 'day');
+    assert.equal(f.App.current, 'control');
+    assert.equal(calls.length, 1);
+    assert.deepEqual(modes, []);
+    assert.deepEqual(f.standby, []);
+  }
+});
+
+test('manual dimming also follows the clock schedule before the idle timeout', () => {
   const f = fixture(); f.start();
-  f.clock('2026-10-12T20:59:58-06:00'); f.App.setMode('ambient');
-  f.tick(); assert.equal(f.App.mode, 'ambient');
-  f.tick(); assert.equal(f.App.mode, 'night');
-  f.clock('2026-10-13T05:59:58-06:00');
-  f.tick(); assert.equal(f.App.mode, 'night');
-  f.tick(); assert.equal(f.App.mode, 'ambient');
-  assert.ok(f.standby.every(Boolean), 'Schedule changes keep standby brightness');
-});
-
-test('night dashboard becomes day at dawn and uses the normal idle timeout', () => {
-  const f = fixture(); f.start();
-  f.clock('2026-10-13T05:59:59-06:00'); f.App.setMode('nightdash');
-  f.tick(); assert.equal(f.App.mode, 'day');
-  assert.equal(f.standby.at(-1), false);
-  f.tick(119); assert.equal(f.App.mode, 'day');
-  f.tick(); assert.equal(f.App.mode, 'ambient');
-});
-
-test('night wake still returns after 20 seconds, while active day stays awake', () => {
-  const f = fixture(); f.start();
-  f.clock('2026-10-12T22:00:00-06:00'); f.App.setMode('nightdash');
-  f.tick(19); assert.equal(f.App.mode, 'nightdash');
-  f.tick(); assert.equal(f.App.mode, 'night');
-  f.clock('2026-10-12T20:59:59-06:00'); f.App.setMode('day');
-  f.tick(); assert.equal(f.App.mode, 'day');
-  f.tick(118); assert.equal(f.App.mode, 'day');
-  f.tick(); assert.equal(f.App.mode, 'night');
-});
-
-test('standby recovers when the device clock jumps across the schedule', () => {
-  const f = fixture(); f.start();
-  f.clock('2026-10-12T23:00:00-06:00'); f.App.setMode('night');
-  f.clock('2026-10-13T09:37:00-06:00'); f.tick();
-  assert.equal(f.App.mode, 'ambient');
-  const transitions = f.standby.length;
-  f.tick(60); assert.equal(f.standby.length, transitions);
-  f.clock('2026-10-12T23:00:00-06:00'); f.tick();
-  assert.equal(f.App.mode, 'night');
-});
-
-test('preserves installed standby transitions at nightfall and dawn without interaction', () => {
-  const f = fixture(); f.view('home'); f.App.start();
-  f.App.setTime(20, 59); f.App.setMode('ambient'); f.tick();
-  assert.equal(f.App.mode, 'ambient');
-  f.App.setTime(21, 0); f.tick();
-  assert.equal(f.App.mode, 'night');
-  f.App.setTime(5, 59); f.tick();
-  assert.equal(f.App.mode, 'night');
-  f.App.setTime(6, 0); f.tick();
-  assert.equal(f.App.mode, 'ambient');
-  f.App.setMode('nightdash'); f.tick();
-  assert.equal(f.App.mode, 'day');
-  assert.equal(f.standby.at(-1), false);
+  const calls = f.view('control'), modes = [];
+  f.App.go('control'); f.App.setTime(20, 59); f.App.resetIdle();
+  f.App.on('mode', mode => modes.push(mode));
+  f.App.setMode('dim');
+  const renders = calls.length;
+  assert.deepEqual(f.standbyCalls, [{ standby: true, night: false }]);
+  f.tick(60);
+  assert.deepEqual(f.standbyCalls, [{ standby: true, night: false }, { standby: true, night: true }]);
+  assert.equal(f.App.mode, 'dim');
+  assert.equal(f.App.current, 'control');
+  assert.equal(calls.length, renders);
+  assert.deepEqual(modes, ['dim']);
 });

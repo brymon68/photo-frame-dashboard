@@ -83,3 +83,12 @@ test('browser previews never request private HA data or substitute sample rooms'
   assert.equal(f.App.lights.rooms.length, 0);
   assert.equal(f.App.lights.label(), 'Connect Home Assistant');
 });
+
+test('brightness is available only for dimmable lights, with off and older caches handled', () => {
+  const parse = patch => parseLights({ rooms: data.rooms, lights: [{ ...data.lights[0], ...patch }] }).lights[0];
+  assert.equal(parse({ dimmable: true, level: 42 }).level, 42);
+  assert.equal(parse({ dimmable: true, level: null, state: 'off' }).level, 0);
+  assert.equal(parse({}).dimmable, false); assert.equal(parse({}).level, null);
+  assert.equal(parse({ id: 'switch.room_lights', dimmable: true }).dimmable, false);
+  for (const level of [-1, 101, 1.5, '50']) assert.throws(() => parse({ level }));
+});

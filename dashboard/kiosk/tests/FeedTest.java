@@ -73,6 +73,12 @@ public class FeedTest {
     check(last.getRequestProperty("User-Agent").equals("HomeHQ-" + name + "/1.0"), name + " User-Agent");
   }
 
+  private static String availability(long updated, long rangeStart, long rangeEnd, String busy) {
+    return "{\"id\":\"work\",\"name\":\" Cyber \",\"color\":\"#2d5bff\","
+        + "\"revision\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\","
+        + "\"updated\":" + updated + ",\"rangeStart\":" + rangeStart + ",\"rangeEnd\":" + rangeEnd + ",\"busy\":" + busy + "}";
+  }
+
   public static void main(String[] args) throws Exception {
     URL.setURLStreamHandlerFactory(protocol -> {
       if (protocol.equals("file") || protocol.equals("jar")) return null; // JDK/provider resources.
@@ -90,18 +96,26 @@ public class FeedTest {
     Uri statusUri = Uri.parse(ORIGIN + "calendar/status.json");
     check(calendar.request(Uri.parse("https://example.com/dashboard/calendar/feed.ics")) == null, "Foreign origin is untouched");
     check(calendar.request(Uri.parse(ORIGIN.replace("https:", "http:") + "calendar/feed.ics")) == null, "HTTP origin is untouched");
-    response(calendar.request(statusUri), "Calendar", 200, false, "application/json", "{\"configured\":false}");
+    response(calendar.request(statusUri), "Calendar", 200, false, "application/json", "{\"configured\":false,\"sources\":[]}");
     response(calendar.request(calendarUri), "Calendar", 404, false, "text/plain", "");
     check(requests == 0, "Unconfigured calendar makes no network requests");
     Path address = files.resolve("calendar-url.txt");
     for (String bad : new String[] { ADDRESS.replace("https:", "http:"), ADDRESS.replace("calendar.google.com", "example.com"),
         ADDRESS.replace("calendar.google.com", "user@calendar.google.com"), ADDRESS.replace("calendar.google.com", "calendar.google.com:443"),
-        ADDRESS + "?query=1", ADDRESS + "#fragment", ADDRESS.replace(".ics", ".txt") }) {
+        ADDRESS + "?query=1", ADDRESS + "#fragment", ADDRESS.replace(".ics", ".txt"), "https://[invalid", ADDRESS + "\nsecond-line" }) {
       Files.write(address, bytes(bad));
       response(calendar.request(calendarUri), "Calendar", 404, false, "text/plain", "");
     }
     Files.write(address, bytes(ADDRESS));
-    response(calendar.request(statusUri), "Calendar", 200, false, "application/json", "{\"configured\":true}");
+    String familyStatus = body(calendar.request(statusUri));
+    org.json.JSONObject calendarStatus = new org.json.JSONObject(familyStatus);
+    org.json.JSONArray calendarSources = calendarStatus.getJSONArray("sources");
+    check(calendarStatus.getString("configured").equals("true") && calendarSources.length() == 1, "Legacy Family calendar is configured");
+    check(calendarSources.getJSONObject(0).getString("id").equals("family")
+        && calendarSources.getJSONObject(0).getString("name").equals("Family")
+        && calendarSources.getJSONObject(0).getString("color").equals("#111111"), "Legacy Family display identity is stable");
+    check(calendarSources.getJSONObject(0).getString("revision").matches("[a-f0-9]{64}"), "Calendar revision is opaque");
+    check(!familyStatus.contains(ADDRESS) && !familyStatus.contains("private-test"), "Status never contains private calendar addresses");
     response(calendar.request(Uri.parse(ORIGIN + "calendar/missing")), "Calendar", 404, false, "text/plain", "");
 
     network(200, CALENDAR);
@@ -137,6 +151,188 @@ public class FeedTest {
     response(calendar.request(calendarUri), "Calendar", 200, false, "text/calendar", CALENDAR);
     check(!Files.exists(cache), "Full disk still returns fresh data");
     AtomicFile.failWrites = false;
+
+    Path sourceConfig = files.resolve("calendar-sources.json");
+    String personalAddress = ADDRESS.replace("/test/", "/personal/");
+    String personalCalendar = CALENDAR.replace("VERSION:2.0", "VERSION:2.0\nX-WR-CALNAME:Personal");
+    String source = "{\"id\":\"personal\",\"name\":\"  Bryce  Calendar  \",\"color\":\"#2d5bff\",\"url\":\"" + personalAddress + "\"}";
+    Files.write(sourceConfig, bytes("[" + source + "]"));
+    String multipleStatus = body(calendar.request(statusUri));
+    calendarSources = new org.json.JSONObject(multipleStatus).getJSONArray("sources");
+    check(calendarSources.length() == 2, "Family and personal calendars are both configured");
+    org.json.JSONObject personalSource = calendarSources.getJSONObject(1);
+    check(personalSource.getString("id").equals("personal") && personalSource.getString("name").equals("Bryce Calendar")
+        && personalSource.getString("color").equals("#2D5BFF"), "Additional display metadata is sanitized");
+    check(!multipleStatus.contains("calendar.google.com") && !multipleStatus.contains("private-test"), "Multiple-source status omits URLs");
+    String personalRevision = personalSource.getString("revision");
+    Uri personalUri = Uri.parse(ORIGIN + "calendar/personal.ics");
+    network(200, CALENDAR);
+    response(calendar.request(Uri.parse(ORIGIN + "calendar/family.ics")), "Calendar", 200, false, "text/calendar", CALENDAR);
+    check(last.getURL().toString().equals(ADDRESS), "Family alias uses the original address");
+    network(200, personalCalendar);
+    response(calendar.request(personalUri), "Calendar", 200, false, "text/calendar", personalCalendar);
+    check(last.getURL().toString().equals(personalAddress), "Personal route uses only the selected address");
+    Path personalCache = files.resolve("calendar-personal-" + personalRevision + ".ics");
+    check(Arrays.equals(Files.readAllBytes(personalCache), bytes(personalCalendar)), "Personal feed has an independent persisted cache");
+    check(Arrays.equals(Files.readAllBytes(files.resolve("calendar-feed.ics")), bytes(CALENDAR)), "Personal fetch preserves legacy Family cache");
+    calendar = new CalendarFeed(context); network(503, "");
+    response(calendar.request(personalUri), "Calendar", 200, true, "text/calendar", personalCalendar);
+    response(calendar.request(calendarUri), "Calendar", 200, true, "text/calendar", CALENDAR);
+    Files.write(sourceConfig, bytes("[" + source.replace("/personal/", "/replacement/") + "]"));
+    String replacementRevision = new org.json.JSONObject(body(calendar.request(statusUri))).getJSONArray("sources")
+        .getJSONObject(1).getString("revision");
+    check(!replacementRevision.equals(personalRevision), "Changed source address changes the browser cache revision");
+    response(calendar.request(personalUri), "Calendar", 503, true, "text/plain", "");
+    check(Arrays.equals(Files.readAllBytes(personalCache), bytes(personalCalendar)), "Changed address never reuses another calendar's cached events");
+
+    for (String invalid : new String[] { "{", "{}", "[" + source + "," + source + "]",
+        "[" + source.replace("personal\"", "family\"") + "]",
+        "[" + source.replace("personal\"", "feed\"") + "]",
+        "[" + source.replace("personal\"", "../private\"") + "]",
+        "[" + source.replace("personal\"", "Personal\"") + "]",
+        "[" + source.replace("#2d5bff", "red") + "]",
+        "[" + source.replace("  Bryce  Calendar  ", " ") + "]",
+        "[" + source.replace("  Bryce  Calendar  ", "12345678901234567890123456789012345678901") + "]",
+        "[" + source.replace("https://calendar.google.com", "https://example.com") + "]",
+        "[" + source.replace("https://calendar.google.com", "http://calendar.google.com") + "]" }) {
+      Files.write(sourceConfig, bytes(invalid)); prior = requests;
+      response(calendar.request(statusUri), "Calendar", 200, false, "application/json", familyStatus);
+      response(calendar.request(personalUri), "Calendar", 404, false, "text/plain", "");
+      check(requests == prior, "Invalid additional configuration neither fetches nor breaks Family metadata");
+    }
+    StringBuilder manySources = new StringBuilder("[");
+    for (int index = 0; index < 8; index++) {
+      if (index > 0) manySources.append(',');
+      manySources.append(source.replace("personal\"", "personal-" + index + "\""));
+    }
+    manySources.append(']');
+    Files.write(sourceConfig, bytes(manySources.toString()));
+    response(calendar.request(statusUri), "Calendar", 200, false, "application/json", familyStatus);
+    Files.write(sourceConfig, new byte[40 * 1024 + 1]);
+    response(calendar.request(statusUri), "Calendar", 200, false, "application/json", familyStatus);
+    Files.write(sourceConfig, bytes("[" + source + "]"));
+    Files.delete(address);
+    calendarSources = new org.json.JSONObject(body(calendar.request(statusUri))).getJSONArray("sources");
+    check(calendarSources.length() == 1 && calendarSources.getJSONObject(0).getString("id").equals("personal"), "An additional calendar works without a Family address");
+    prior = requests;
+    response(calendar.request(calendarUri), "Calendar", 404, false, "text/plain", "");
+    check(requests == prior, "Missing Family cannot use another source or its old cache");
+    Files.write(sourceConfig, bytes("[]"));
+    response(calendar.request(statusUri), "Calendar", 200, false, "application/json", "{\"configured\":false,\"sources\":[]}");
+    response(calendar.request(personalUri), "Calendar", 404, false, "text/plain", "");
+    check(requests == prior, "Removing a source stops fetching and hides its old cache");
+    Files.delete(sourceConfig);
+
+    Path availabilityFile = files.resolve("calendar-availability.json");
+    Uri availabilityUri = Uri.parse(ORIGIN + "calendar/work.ics");
+    long rangeStart = java.time.Instant.parse("2026-10-17T08:00:00Z").toEpochMilli();
+    long rangeEnd = rangeStart + 24 * 60 * 60 * 1000;
+    long importedAt = System.currentTimeMillis() - 60000;
+    String busyInterval = "{\"start\":" + (rangeStart + 3600000) + ",\"end\":" + (rangeStart + 7200000)
+        + ",\"title\":\"Private meeting\",\"description\":\"Private details\"}";
+    String snapshot = availability(importedAt, rangeStart, rangeEnd, "[" + busyInterval + "]");
+    Files.write(availabilityFile, bytes(snapshot));
+    prior = requests;
+    String availabilityStatus = body(calendar.request(statusUri));
+    org.json.JSONObject workSource = new org.json.JSONObject(availabilityStatus).getJSONArray("sources").getJSONObject(0);
+    check(workSource.getString("id").equals("work") && workSource.getString("name").equals("Cyber")
+        && workSource.getString("color").equals("#2D5BFF") && workSource.getString("kind").equals("availability"), "Availability source exposes sanitized display metadata");
+    check(workSource.getDouble("rangeStart") == rangeStart && workSource.getDouble("rangeEnd") == rangeEnd, "Availability source exposes its coverage window");
+    check(!availabilityStatus.contains("Private") && !availabilityStatus.contains("busy"), "Availability metadata omits private interval details");
+    WebResourceResponse imported = calendar.request(availabilityUri);
+    check(imported.status == 200 && imported.type.equals("text/calendar"), "Availability produces an iCal feed");
+    check(imported.headers.get("X-Calendar-Updated").equals(Long.toString(importedAt))
+        && imported.headers.get("X-Calendar-Stale").equals("false"), "Freshness uses the snapshot import timestamp");
+    check(imported.headers.get("X-Calendar-Revision").equals(workSource.getString("revision"))
+        && imported.headers.get("X-Calendar-Range-Start").equals(Long.toString(rangeStart))
+        && imported.headers.get("X-Calendar-Range-End").equals(Long.toString(rangeEnd)), "Availability feed binds identity and coverage to its payload");
+    String busyCalendar = body(imported);
+    check(busyCalendar.startsWith("BEGIN:VCALENDAR\r\n") && busyCalendar.endsWith("END:VCALENDAR\r\n"), "Availability has a complete iCal envelope");
+    check(busyCalendar.contains("DTSTART:20261017T090000Z\r\nDTEND:20261017T100000Z\r\nSUMMARY:Busy\r\n"), "Availability emits UTC Busy intervals only");
+    check(!busyCalendar.contains("Private") && !busyCalendar.contains("Cyber") && !busyCalendar.contains("calendar.google.com"), "Availability never emits event details or addresses");
+    String busyUid = busyCalendar.split("UID:")[1].split("\r\n")[0];
+    check(busyUid.matches("[a-f0-9]{64}@homehq"), "Availability UID is opaque and stable");
+    calendar = new CalendarFeed(context);
+    response(calendar.request(availabilityUri), "Calendar", 200, false, "text/calendar", busyCalendar);
+    check(requests == prior, "Availability survives restart without any network request");
+    long oldImport = System.currentTimeMillis() - 31 * 60 * 1000;
+    Files.write(availabilityFile, bytes(availability(oldImport, rangeStart, rangeEnd, "[" + busyInterval + "]")));
+    WebResourceResponse staleImport = calendar.request(availabilityUri);
+    check(staleImport.headers.get("X-Calendar-Stale").equals("true")
+        && staleImport.headers.get("X-Calendar-Updated").equals(Long.toString(oldImport)), "Old snapshot stays usable with its original stale timestamp");
+    check(body(staleImport).contains("UID:" + busyUid + "\r\n"), "Refreshing a snapshot keeps the same busy interval UID");
+    long futureImport = System.currentTimeMillis() + 6 * 60 * 1000;
+    Files.write(availabilityFile, bytes(availability(futureImport, rangeStart, rangeEnd, "[" + busyInterval + "]")));
+    WebResourceResponse futureAvailability = calendar.request(availabilityUri);
+    check(futureAvailability.headers.get("X-Calendar-Stale").equals("true")
+        && futureAvailability.headers.get("X-Calendar-Updated").equals(Long.toString(futureImport)), "Materially future import timestamp is stale and never rewritten");
+    body(futureAvailability);
+    Files.write(availabilityFile, bytes(availability(importedAt, rangeStart, rangeEnd, "[]")));
+    String emptyCalendar = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Home HQ//Availability//EN\r\nEND:VCALENDAR\r\n";
+    response(calendar.request(availabilityUri), "Calendar", 200, false, "text/calendar", emptyCalendar);
+    check(new org.json.JSONObject(body(calendar.request(statusUri))).getJSONArray("sources").length() == 1, "Empty busy intervals still represent a configured snapshot");
+    Files.write(availabilityFile, bytes(availability(importedAt, rangeStart, rangeEnd, "[" + busyInterval + "," + busyInterval + "]")));
+    response(calendar.request(availabilityUri), "Calendar", 200, false, "text/calendar", busyCalendar);
+    String shortInterval = "[{\"start\":" + (rangeStart + 1) + ",\"end\":" + (rangeStart + 2) + "}]";
+    Files.write(availabilityFile, bytes(availability(importedAt, rangeStart, rangeEnd, shortInterval)));
+    check(body(calendar.request(availabilityUri)).contains("DTSTART:20261017T080000Z\r\nDTEND:20261017T080001Z"), "Subsecond intervals round outward to a nonempty iCal interval");
+    Files.write(availabilityFile, bytes(snapshot));
+    org.json.JSONObject beforeRollover = new org.json.JSONObject(body(calendar.request(statusUri))).getJSONArray("sources").getJSONObject(0);
+    long shiftedStart = rangeStart + 24 * 60 * 60 * 1000;
+    long shiftedEnd = rangeEnd + 24 * 60 * 60 * 1000;
+    String shiftedInterval = "[{\"start\":" + (shiftedStart + 3600000) + ",\"end\":" + (shiftedStart + 7200000) + "}]";
+    Files.write(availabilityFile, bytes(availability(importedAt + 1, shiftedStart, shiftedEnd, shiftedInterval)));
+    WebResourceResponse rolled = calendar.request(availabilityUri);
+    check(beforeRollover.getDouble("rangeStart") == rangeStart
+        && rolled.headers.get("X-Calendar-Range-Start").equals(Long.toString(shiftedStart))
+        && rolled.headers.get("X-Calendar-Range-End").equals(Long.toString(shiftedEnd))
+        && rolled.headers.get("X-Calendar-Updated").equals(Long.toString(importedAt + 1)), "Snapshot rollover returns payload coverage independently of earlier status");
+    check(body(rolled).contains("DTSTART:20261018T090000Z\r\nDTEND:20261018T100000Z"), "Rollover coverage and intervals describe the same snapshot");
+
+    Files.write(address, bytes(ADDRESS));
+    Files.write(sourceConfig, bytes("[" + source + "]"));
+    Files.write(availabilityFile, bytes(snapshot));
+    calendarSources = new org.json.JSONObject(body(calendar.request(statusUri))).getJSONArray("sources");
+    check(calendarSources.length() == 3 && calendarSources.getJSONObject(0).getString("id").equals("family")
+        && calendarSources.getJSONObject(1).getString("id").equals("personal")
+        && calendarSources.getJSONObject(2).getString("id").equals("work"), "Availability appends after all existing calendars");
+    Files.write(availabilityFile, bytes(snapshot.replace("\"id\":\"work\"", "\"id\":\"personal\"")));
+    calendarSources = new org.json.JSONObject(body(calendar.request(statusUri))).getJSONArray("sources");
+    check(calendarSources.length() == 2 && calendarSources.getJSONObject(1).isNull("kind"), "Availability cannot replace a configured source with the same ID");
+    response(calendar.request(availabilityUri), "Calendar", 404, false, "text/plain", "");
+    Files.delete(sourceConfig);
+    for (String invalid : new String[] { "{", "[]", snapshot.replace("\"work\"", "\"family\""),
+        snapshot.replace("\"work\"", "\"feed\""), snapshot.replace("\"work\"", "\"../work\""),
+        snapshot.replace(" Cyber ", " "), snapshot.replace("#2d5bff", "blue"),
+        snapshot.replace("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "revision"),
+        snapshot.replace("\"updated\":" + importedAt, "\"updated\":-1"),
+        snapshot.replace("\"updated\":" + importedAt, "\"updated\":1.5"),
+        snapshot.replace("\"updated\":" + importedAt, "\"updated\":\"" + importedAt + "\""),
+        snapshot.replace("\"updated\":" + importedAt, "\"updated\":1e999"),
+        snapshot.replace("\"updated\":" + importedAt, "\"updated\":253402300799001"),
+        availability(importedAt, rangeStart, rangeStart, "[]"),
+        availability(importedAt, rangeStart, rangeStart + 366L * 24 * 60 * 60 * 1000 + 1, "[]"),
+        availability(importedAt, rangeStart, rangeEnd, "{}"),
+        availability(importedAt, rangeStart, rangeEnd, "[{\"start\":" + (rangeStart - 1) + ",\"end\":" + rangeEnd + "}]"),
+        availability(importedAt, rangeStart, rangeEnd, "[{\"start\":" + rangeStart + ",\"end\":" + (rangeEnd + 1) + "}]"),
+        availability(importedAt, rangeStart, rangeEnd, "[{\"start\":" + rangeEnd + ",\"end\":" + rangeStart + "}]"),
+        availability(importedAt, rangeStart, rangeEnd, "[{\"start\":" + rangeStart + ",\"end\":" + rangeStart + "}]") }) {
+      Files.write(availabilityFile, bytes(invalid));
+      response(calendar.request(statusUri), "Calendar", 200, false, "application/json", familyStatus);
+      response(calendar.request(availabilityUri), "Calendar", 404, false, "text/plain", "");
+    }
+    StringBuilder manyIntervals = new StringBuilder("[");
+    for (int index = 0; index < 5001; index++) {
+      if (index > 0) manyIntervals.append(',');
+      manyIntervals.append("{\"start\":").append(rangeStart).append(",\"end\":").append(rangeEnd).append('}');
+    }
+    manyIntervals.append(']');
+    Files.write(availabilityFile, bytes(availability(importedAt, rangeStart, rangeEnd, manyIntervals.toString())));
+    response(calendar.request(availabilityUri), "Calendar", 404, false, "text/plain", "");
+    Files.write(availabilityFile, new byte[512 * 1024 + 1]);
+    response(calendar.request(availabilityUri), "Calendar", 404, false, "text/plain", "");
+    check(requests == prior, "All availability reads and validation failures remain offline");
+    Files.delete(availabilityFile);
 
     WeatherFeed weather = new WeatherFeed(context);
     Uri weatherUri = Uri.parse(ORIGIN + "weather/forecast.json");
@@ -228,7 +424,7 @@ public class FeedTest {
     response(lights.request(lightsUri), "Lights", 404, false, "application/json", "");
     Files.write(config, bytes("{\"url\":\"http://ha.test:8123\",\"token\":\"test-token\"}"));
     String roomLights = "{\"rooms\":[{\"id\":\"room\",\"name\":\"Room\"}],\"lights\":["
-        + "{\"id\":\"light.lamp\",\"name\":\"Lamp\",\"room\":\"room\",\"state\":\"on\",\"private_note\":\"omit-me\"},"
+        + "{\"id\":\"light.lamp\",\"name\":\"Lamp\",\"room\":\"room\",\"state\":\"on\",\"brightness\":128,\"supported_color_modes\":[\"brightness\"],\"private_note\":\"omit-me\"},"
         + "{\"id\":\"switch.ceiling_lights\",\"name\":\"Ceiling\",\"room\":null,\"state\":\"off\"},"
         + "{\"id\":\"light.lost\",\"name\":\"Lost\",\"room\":\"deleted\",\"state\":\"unknown\"}]}";
     network(200, roomLights);
@@ -238,6 +434,11 @@ public class FeedTest {
     check(liveLights.status == 200 && lightData.getJSONArray("rooms").length() == 1, "Rooms retained");
     check(lightData.getJSONArray("lights").length() == 3, "Light and lighting switch states retained");
     check(lightData.getJSONArray("lights").getJSONObject(0).getString("room").equals("room"), "Room association retained");
+    check(lightData.getJSONArray("lights").getJSONObject(0).getInt("level") == 50, "Brightness normalized to percentage");
+    check(lightData.getJSONArray("lights").getJSONObject(0).getString("dimmable").equals("true"), "Brightness capability retained");
+    check(lightData.getJSONArray("lights").getJSONObject(1).getInt("level") == 0, "Off displays zero brightness");
+    check(lightData.getJSONArray("lights").getJSONObject(1).getString("dimmable").equals("false"), "Switch cannot dim");
+    check(lightData.getJSONArray("lights").getJSONObject(2).isNull("level"), "Unknown brightness stays unknown");
     check(lightData.getJSONArray("lights").getJSONObject(2).isNull("room"), "Missing room treated as unassigned");
     check(lightData.getJSONArray("lights").getJSONObject(2).getString("state").equals("unavailable"), "Unknown is not off");
     check(!safeLights.contains("omit-me") && !safeLights.contains("test-token"), "Only display fields leave native feed");

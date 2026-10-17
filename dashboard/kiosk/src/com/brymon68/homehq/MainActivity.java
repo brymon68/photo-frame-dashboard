@@ -48,6 +48,8 @@ public class MainActivity extends Activity {
   private WeatherFeed weatherFeed;
   private ClimateFeed climateFeed;
   private LightsFeed lightsFeed;
+  private CamerasFeed camerasFeed;
+  private CameraStream cameraStream;
   private HomeAssistantControl homeAssistantControl;
   private final Handler handler = new Handler(Looper.getMainLooper());
   private final int[] exitIds = new int[2];
@@ -93,6 +95,8 @@ public class MainActivity extends Activity {
     weatherFeed = new WeatherFeed(this);
     climateFeed = new ClimateFeed(this);
     lightsFeed = new LightsFeed(this);
+    camerasFeed = new CamerasFeed(this);
+    cameraStream = new CameraStream(this);
     homeAssistantControl = new HomeAssistantControl(this);
     WebSettings s = web.getSettings();
     s.setJavaScriptEnabled(true);
@@ -105,12 +109,15 @@ public class MainActivity extends Activity {
     web.setWebViewClient(new WebViewClient() {
       @Override
       public void onPageStarted(WebView view, String url, Bitmap favicon) {
+        cameraStream.close();
         // A reload or a different page starts at the owner's usual brightness.
-        setStandbyBrightness(false);
+        setStandbyBrightness(false, false);
       }
 
       @Override
       public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+        WebResourceResponse stream = cameraStream.request(request);
+        if (stream != null) return stream;
         WebResourceResponse command = homeAssistantControl.request(request);
         if (command != null) return command;
         WebResourceResponse calendar = calendarFeed.request(request.getUrl());
@@ -121,6 +128,8 @@ public class MainActivity extends Activity {
         if (climate != null) return climate;
         WebResourceResponse lights = lightsFeed.request(request.getUrl());
         if (lights != null) return lights;
+        WebResourceResponse cameras = camerasFeed.request(request.getUrl());
+        if (cameras != null) return cameras;
         return bundledAsset(request.getUrl());
       }
 
@@ -149,6 +158,7 @@ public class MainActivity extends Activity {
   @Override
   protected void onPause() {
     cancelExit();
+    if (cameraStream != null) cameraStream.close();
     NavigationService.setDashboardVisible(false);
     super.onPause();
   }
@@ -176,25 +186,26 @@ public class MainActivity extends Activity {
     return url;
   }
 
-  /** Only the packaged dashboard can request the fixed standby backlight level. */
+  /** Only the packaged dashboard can request the fixed daytime and nighttime standby levels. */
   public final class ScreenBrightness {
     @JavascriptInterface
-    public void setStandby(final boolean standby) {
+    public void setStandby(final boolean standby, final boolean night) {
       // JavaScript interfaces run off the UI thread; window changes must run on it.
       handler.post(() -> {
         if (web == null || web.getUrl() == null) return;
         Uri uri = Uri.parse(web.getUrl());
         if ("https".equals(uri.getScheme()) && BUNDLED_HOST.equals(uri.getHost())
             && "/dashboard/index.html".equals(uri.getPath())) {
-          setStandbyBrightness(standby);
+          setStandbyBrightness(standby, night);
         }
       });
     }
   }
 
-  private void setStandbyBrightness(boolean standby) {
+  private void setStandbyBrightness(boolean standby, boolean night) {
     WindowManager.LayoutParams params = getWindow().getAttributes();
-    float brightness = standby ? 0.05f : WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+    float brightness = standby ? (night ? 0.05f : 0.15f)
+        : WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
     if (params.screenBrightness == brightness) return;
     params.screenBrightness = brightness;
     getWindow().setAttributes(params);
@@ -243,6 +254,7 @@ public class MainActivity extends Activity {
   @Override
   protected void onDestroy() {
     handler.removeCallbacksAndMessages(null);
+    if (cameraStream != null) cameraStream.close();
     if (web != null) web.destroy();
     super.onDestroy();
   }

@@ -5,7 +5,7 @@ This repository maintains the Home HQ dashboard installed on a Pastigio FRAME156
 
 The frame runs its existing Android 8.1 firmware and WebView 106. **We replaced
 the default launcher with Home HQ; we did not replace Android or flash new
-firmware.** The installed app is Home HQ 1.20. Repository changes are
+firmware.** The installed app is Home HQ 1.30. Repository changes are
 not installed automatically.
 
 The frame uses `com.brymon68.homehq`, signed with the owner's brymon68 key, as
@@ -20,29 +20,52 @@ that session. Routine app maintenance does not require new firmware captures.
 
 ## What this repository maintains
 
-- `dashboard/`: Today, Calendar, Shopping, Home controls, Agents, and standby
-  displays, with tests for feeds, routing, and touch gestures.
+- `dashboard/`: Today, Calendar, Shopping, Home controls, and Agents, with idle
+  dimming and tests for feeds, routing, and touch gestures.
 - `dashboard/kiosk/`: the Android WebView app, native calendar/weather/Home Assistant transport,
-  navigation service, Mac/Linux APK build, and calendar configuration helper.
+  navigation service, Mac/Linux APK build, and calendar configuration helpers.
 - `scripts/frame-viewer.py`: an optional read-only browser view of the frame's
   screen through an existing ADB connection.
 - `docs/`: current Pastigio operation and [display-viewer instructions](docs/frame-viewer.md).
 
-Calendar, weather, and Home Assistant climate and lighting data are live. Home
+The Family calendar, weather, and Home Assistant climate and lighting data
+refresh directly on the frame. Family appears in black beside blue work-calendar
+**Busy** blocks, with separate names and refresh status. The work calendar uses
+bounded availability snapshots fetched directly from Google Calendar by a
+scheduled Python job on the computer every 15 minutes. The computer must be
+awake with Google and the frame reachable; Codex and a browser need not be
+running. The frame checks for updates
+every five minutes. Snapshots older
+than 30 minutes are marked stale; dates outside their coverage are unavailable.
+Event titles and details are not included. Calendar also has a Monday–Friday
+**Work Week** view. Home
 shows the configured rooms and their lights with On/Off/Unavailable
-status; tap an available light to toggle it. Unassigned lights have their own section. Each climate device has a dark
+status; tap an available light to toggle it. Dimmable lights also show a percentage
+and support horizontal dragging to set brightness. Empty areas are hidden;
+unassigned lights have their own section. Each climate device has a dark
 tile showing its name, current temperature, mode/activity, and target. Both feeds
 refresh every 30 seconds. Tap a climate card to adjust its target or mode and
 press Apply. Pending commands block repeat taps; failed commands refresh state
-and show a message. Home displays only live room lights and climate; its
-summary strip and demo camera/media panels have been removed. Agent usage and hidden demo alerts remain
-sample data. Browser previews retain the sample calendar and show a connection prompt
+and show a message. Home starts with Favorites for Amelie's Bedroom, Joseph's
+Bedroom, and Hallway; tap one to open its temperature controls. Today shows a
+separate reading for each of those rooms alongside the live light count. The
+dummy lock status, old summary strip, and demo camera/media panels have been
+removed. The Cameras button beside Favorites opens live Home Assistant camera tiles;
+tap one to view its WebRTC stream full-screen, with Back and Close over the video.
+The whole picture stays visible without cropping. Only the selected camera streams, and closing
+the viewer or leaving its tab stops it. Doorbell shortcuts inside Today’s Home
+card and beside Cameras on Home open the player directly. Today retains its
+shopping card and shows larger names and temperature readings for the two bedrooms. The next-event title has room for full serif
+descenders. Agent usage and hidden demo alerts remain sample data. Browser previews retain the sample calendar and show a connection prompt
 for Home Assistant when no native feed is available.
 
 Other-device setup scripts, firmware experiments, recovery workflows, community
 catalogs, and obsolete installation logs are retired from this fork. The active
 dashboard still keeps offline feed caches, gesture cancellation, and user-facing
-Undo actions.
+Undo actions. After two minutes idle, the current view stays visible at 15% window
+brightness during the day and 5% from 9 p.m. to 5 a.m. in the frame’s local time.
+The level updates at either boundary even while already idle. Touch restores normal brightness; there is no screensaver or automatic
+tab change.
 
 ## Develop and check
 
@@ -90,7 +113,7 @@ certificate are separate parts of an Android app's identity:
 
 | Property | Installed app |
 | --- | --- |
-| Version | 1.20 |
+| Version | 1.30 |
 | Package | `com.brymon68.homehq` |
 | Certificate subject | `CN=brymon68, O=Home HQ` |
 | Status | Current default launcher and navigation service |

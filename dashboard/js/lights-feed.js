@@ -15,8 +15,11 @@ export function parseLights(data) {
         || !(light.room === null || typeof light.room === 'string')
         || !['on', 'off', 'unknown', 'unavailable'].includes(light.state)) throw new Error('Invalid light');
     lightIds.add(light.id);
+    if (light.level != null && (!Number.isInteger(light.level) || light.level < 0 || light.level > 100)) throw new Error('Invalid light level');
     return { id: light.id, name: light.name.trim() || light.id.split('.')[1],
       room: roomIds.has(light.room) ? light.room : null,
+      dimmable: light.id.startsWith('light.') && light.dimmable === true,
+      level: light.state === 'off' ? 0 : light.level ?? null,
       state: light.state === 'on' || light.state === 'off' ? light.state : 'unavailable' };
   }).sort(byName);
   if (lights.some(light => light.room === null)) rooms.push({ id: null, name: 'Unassigned' });

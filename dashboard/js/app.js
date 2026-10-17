@@ -1,4 +1,4 @@
-// Core shell: router, demo clock, idle/ambient, toasts, sheets, helpers.
+// Core shell: router, demo clock, idle dimming, toasts, sheets, helpers.
 (function () {
   'use strict';
   var D = window.DATA;
@@ -24,7 +24,7 @@
   App.dayStart = function (d) { var x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
   App.addDays = function (d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; };
   App.sameDay = function (a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); };
-  App.isNight = function () { var h = App.now().getHours(); return h >= 21 || h < 6; };
+  App.isNight = function () { var h = App.now().getHours(); return h >= 21 || h < 5; };
 
   var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -66,7 +66,7 @@
     return '<svg class="i ' + (cls || '') + '" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (window.ICONS[name] || '') + '</svg>';
   };
   App.person = function (id) {
-    if (id === 'family' || id === 'any') return D.family;
+    if (id === 'any') return D.family;
     return D.people.find(function (p) { return p.id === id; }) || D.family;
   };
   App.pstyle = function (p) {
@@ -92,8 +92,8 @@
     }
     return list;
   };
-  App.isFamily = function (e) { return e.people.length >= D.people.length; };
-  App.evColor = function (e) { return App.isFamily(e) ? D.family : App.person(e.people[0]); };
+  App.isFamily = function (e) { return e.calendarId ? e.calendarId === 'family' : e.people.length >= D.people.length; };
+  App.evColor = function (e) { return e.calendarId ? App.person(e.calendarId) : App.isFamily(e) ? D.family : App.person(e.people[0]); };
   App.timedOn = function (day, pid) {
     var s = App.dayStart(day), e = App.addDays(s, 1);
     return App.events().filter(function (ev) {
@@ -196,6 +196,8 @@
 
   // ------------------------------------------------------------ sheets (modal cards)
   App.sheet = function (html, opts) {
+    // Replacing a panel must release resources owned by the previous one.
+    App.closeSheet();
     opts = opts || {};
     var layer = $('#sheetLayer');
     layer.innerHTML = '<div class="sheet-scrim"></div><div class="sheet ' + (opts.cls || '') + '">' +
@@ -234,41 +236,26 @@
     el.addEventListener('pointercancel', cancel);
   };
 
-  // ------------------------------------------------------------ modes: day / ambient / night
-  App.setMode = function (m) {
-    var stage = $('#stage');
-    App.mode = m;
-    stage.dataset.mode = m;
-    if (window.HomeHQ && typeof window.HomeHQ.setStandby === 'function') {
-      window.HomeHQ.setStandby(m === 'ambient' || m === 'night');
-    }
-    App.emit('mode', m);
+  // ------------------------------------------------------------ idle dimming
+  // Dimming changes only the window backlight; the current tab and panels stay visible.
+  App.idle = { dim: 120 };
+  var idleSec = 0, activePointers = new Set(), standbyNight = false;
+  App.setMode = function (mode) {
+    var next = mode === 'dim' ? 'dim' : 'day';
+    var night = next === 'dim' && App.isNight(), changed = App.mode !== next;
+    if (!changed && standbyNight === night) return;
+    App.mode = next;
+    standbyNight = night;
+    $('#stage').dataset.mode = next;
+    if (window.HomeHQ && typeof window.HomeHQ.setStandby === 'function') window.HomeHQ.setStandby(next === 'dim', night);
+    if (changed) App.emit('mode', next);
   };
-
-  // ------------------------------------------------------------ idle
-  App.idle = { home: 60, ambient: 120 };
-  var idleSec = 0;
   function onIdleTick() {
-    idleSec++;
-    // Standby can span a schedule boundary or a network clock correction.
-    var night = App.isNight();
-    if (App.mode === 'ambient' || App.mode === 'night') {
-      var standby = night ? 'night' : 'ambient';
-      if (App.mode !== standby) App.setMode(standby);
-      return;
-    }
-    if (App.mode === 'nightdash' && !night) { App.setMode('day'); return; }
-    var blocked = $('#takeover').classList.contains('is-open');
-    if (App.mode === 'nightdash' && idleSec >= 20) { App.setMode('night'); return; }
-    if (App.mode !== 'day' || blocked) return;
-    if (idleSec === App.idle.home && App.current !== 'home') { App.closeSheet(); App.go('home'); }
-    if (idleSec >= App.idle.ambient) {
-      App.closeSheet();
-      App.go('home');
-      App.setMode(night ? 'night' : 'ambient');
-    }
+    if (activePointers.size || $('#takeover').classList.contains('is-open')) return;
+    // Re-evaluate the local-time brightness at 21:00/05:00 even if already idle.
+    if (++idleSec >= App.idle.dim || App.mode === 'dim') App.setMode('dim');
   }
-  App.resetIdle = function () { idleSec = 0; };
+  App.resetIdle = function () { idleSec = 0; App.setMode('day'); };
 
   // ------------------------------------------------------------ stage sizing
   function fit() {
@@ -310,7 +297,15 @@
       var b = e.target.closest('[data-go]');
       if (b && e.detail === 0) App.go(b.dataset.go);
     });
-    document.addEventListener('pointerdown', App.resetIdle, true);
+    document.addEventListener('pointerdown', function (event) {
+      activePointers.add(event.pointerId); App.resetIdle();
+    }, true);
+    ['pointerup', 'pointercancel'].forEach(function (name) {
+      document.addEventListener(name, function (event) { activePointers.delete(event.pointerId); App.resetIdle(); }, true);
+    });
+    document.addEventListener('keydown', App.resetIdle, true);
+    document.addEventListener('wheel', App.resetIdle, { capture: true, passive: true });
+    window.addEventListener('blur', function () { activePointers.clear(); });
     window.addEventListener('hashchange', function () { App.go(location.hash.slice(1)); });
     App.go(location.hash.slice(1) || 'home');
     tick();

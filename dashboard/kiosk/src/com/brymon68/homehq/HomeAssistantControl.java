@@ -74,6 +74,13 @@ final class HomeAssistantControl {
     Set<String> keys = new HashSet<>(Arrays.asList("entity", "action"));
     if ("turn_on".equals(action) || "turn_off".equals(action)) {
       require("on".equals(mode) || "off".equals(mode));
+      if (!input.isNull("brightness")) {
+        keys.add("brightness");
+        require("turn_on".equals(action) && id.startsWith("light.") && supportsBrightness(state.getJSONObject("attributes")));
+        double level = input.getDouble("brightness");
+        require(Double.isFinite(level) && level == Math.rint(level) && level >= 1 && level <= 100);
+        body.put("brightness_pct", (int) level);
+      }
     } else {
       JSONObject attrs = state.getJSONObject("attributes");
       if ("set_hvac_mode".equals(action)) {
@@ -103,6 +110,15 @@ final class HomeAssistantControl {
     }
     for (Iterator<String> it = input.keys(); it.hasNext();) require(keys.contains(it.next()));
     return body;
+  }
+
+  static boolean supportsBrightness(JSONObject attributes) throws JSONException {
+    if (attributes.isNull("supported_color_modes")) return false;
+    JSONArray modes = attributes.getJSONArray("supported_color_modes");
+    for (int i = 0; i < modes.length(); i++) {
+      if (Arrays.asList("brightness", "color_temp", "hs", "xy", "rgb", "rgbw", "rgbww", "white").contains(modes.getString(i))) return true;
+    }
+    return false;
   }
 
   private static double target(JSONObject input, JSONObject attrs, String key) throws JSONException {

@@ -85,3 +85,19 @@ test('capabilities select scalar or dual setpoints and reject malformed capabili
   assert.throws(() => parseClimate([{ ...device, modes: ['bogus'] }]));
   assert.throws(() => parseClimate([{ ...device, features: 1.5 }]));
 });
+
+test('brightness sends bounded percentages, zero turns off, and unsupported controls do nothing', async () => {
+  const f = fixture(); Object.assign(f.light, { id: 'light.bedroom', dimmable: true, level: 0 });
+  f.respond(async () => { f.light.state = 'on'; f.light.level = 50; return { ok: true, json: async () => ({ ok: true }) }; });
+  await f.App.homeControls.setBrightness(f.light.id, 50);
+  assert.deepEqual(JSON.parse(f.calls[0].options.headers['X-HomeHQ-Command']), { entity: 'light.bedroom', action: 'turn_on', brightness: 50 });
+  assert.equal(f.toasts.length, 0);
+  for (const value of [-1, 101, 1.5, NaN, 50]) await f.App.homeControls.setBrightness(f.light.id, value);
+  assert.equal(f.calls.length, 1);
+  f.respond(async () => { f.light.state = 'off'; f.light.level = 0; return { ok: true, json: async () => ({ ok: true }) }; });
+  await f.App.homeControls.setBrightness(f.light.id, 0);
+  assert.deepEqual(JSON.parse(f.calls[1].options.headers['X-HomeHQ-Command']), { entity: 'light.bedroom', action: 'turn_off' });
+  f.light.dimmable = false; await f.App.homeControls.setBrightness(f.light.id, 60);
+  f.light.dimmable = true; f.light.state = 'unavailable'; await f.App.homeControls.setBrightness(f.light.id, 60);
+  assert.equal(f.calls.length, 2);
+});

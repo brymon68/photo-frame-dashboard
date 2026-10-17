@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { climateTemperature, climateDetails } from '../js/climate-feed.js';
+import { bindLightSlider } from '../js/light-slider.js';
+import { climateFavorites } from '../js/climate-favorites.js';
 import { parseLights, lightStatus, lightCounts } from '../js/lights-feed.js';
+import { doorbellCamera } from '../js/cameras-feed.js';
 
-const script = readFileSync(new URL('../js/views/control.js', import.meta.url), 'utf8');
+const script = readFileSync(new URL('../js/views/control.js', import.meta.url), 'utf8').replace(/^import .*\n/gm, '');
 
 // Only model the DOM operations used by the control view; exercise its registered
 // handlers and rendered tiles without exposing or rewriting private functions.
@@ -41,7 +44,7 @@ class Element {
     const id = selector.match(/^\[data-(dev|light)="([^"]+)"\]$/);
     return id ? this.tiles.find(tile => tile.dataset[id[1]] === id[2]) : this.parts.get(selector) || null;
   }
-  querySelectorAll(selector) { return selector === '[data-dev]' ? this.tiles.filter(tile => tile.dataset.dev) : []; }
+  querySelectorAll(selector) { return selector === '[data-light]' ? this.tiles : selector === '[data-dev]' ? this.tiles.filter(tile => tile.dataset.dev) : []; }
   replaceChild(next, old) {
     this.tiles.splice(this.tiles.indexOf(old), 1, next);
     next.width = old.width;
@@ -68,15 +71,22 @@ function fixture(scale = 1) {
   };
   const root = new Element(), stage = new Element(), timers = [], toasts = [];
   stage.height = 800 * scale;
-  for (const cls of ['sum', 'scenes', 'rooms', 'climate', 'cams', 'media']) root.parts.set('.hc-' + cls, new Element(200 * scale));
+  for (const cls of ['favorites', 'sum', 'scenes', 'rooms', 'climate', 'cams', 'media']) root.parts.set('.hc-' + cls, new Element(200 * scale));
   let view, sheet, now = 10000;
-  const handlers = {};
+  const handlers = {}, documentHandlers = {}, players = [];
+  const doc = { hidden: false, createElement: () => new Element(), addEventListener: (name, fn) => { documentHandlers[name] = fn; } };
+  function createCameraPlayer(media, opts) {
+    const player = { start: id => { player.id = id; opts.onState('connecting'); }, stop: () => { player.stopped = true; }, fail: message => opts.onState('error', message) };
+    players.push(player); return player;
+  }
   class Clock extends Date { static now() { return now; } }
   const App = {
+    current: 'control',
     register: (name, registered) => { view = registered; },
     icon: () => '', img: () => '', emit: name => handlers[name]?.(), on: (name, fn) => { handlers[name] = fn; },
     esc: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
     homeControls: { pending: {}, canLight: d => lightStatus(d) !== 'Unavailable', canClimate: d => d.mode !== 'unavailable', toggleLight: id => toasts.push({ toggle: id }), openClimate: id => toasts.push({ climate: id }) },
+    cameras: { devices: [], configured: true, stale: false, canView: d => !!d && d.available && !App.cameras.stale, doorbell: () => doorbellCamera(App.cameras.devices), status: d => d.available ? 'Tap to watch' : 'Unavailable', label: () => 'No cameras found in Home Assistant.', refresh: async () => {} },
     climate: { devices: [], temperature: climateTemperature, details: climateDetails, label: () => 'Connect Home Assistant' },
     $: () => stage, $$: (selector, el) => el.querySelectorAll(selector),
     hold: (el, ms, callbacks) => { el.hold = { ms, ...callbacks }; },
@@ -85,6 +95,11 @@ function fixture(scale = 1) {
       sheet = new Element(200 * scale);
       sheet.innerHTML = html;
       sheet.parts.set('.tiles--sheet', sheet);
+      if (html.includes('camera-dialog')) {
+        const content = new Element();
+        for (const selector of ['.camera-stream', '.camera-message', '.camera-stream-status', '[data-camera-retry]']) content.parts.set(selector, new Element());
+        sheet.parts.set('.camera-dialog', content);
+      }
       for (const [cls, width] of [['slide-confirm', 400], ['sc-knob', 76], ['sc-fill', 0]]) {
         sheet.parts.set('.' + cls, new Element(width * scale));
       }
@@ -105,14 +120,19 @@ function fixture(scale = 1) {
     summary: () => ({ value: 1, detail: '1 on · 1 unavailable' }), label: () => 'No lights'
   };
   vm.runInNewContext(script, {
-    window: { DATA: data }, App, Date: Clock,
-    document: { createElement: () => new Element() },
+    window: { DATA: data }, App, bindLightSlider, climateFavorites, createCameraPlayer, Date: Clock,
+    document: doc,
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
     setInterval() {}, clearInterval() {}
   });
   view.show(root);
   return {
-    App, data, root, timers, toasts,
+    App, data, root, timers, toasts, players,
+    hide: () => view.hide(), hidden: () => { doc.hidden = true; documentHandlers.visibilitychange(); },
+    cameraClick: attrs => {
+      const button = { dataset: attrs, hasAttribute: name => name === 'data-camera-back' ? attrs.back : name === 'data-camera-refresh' ? attrs.refresh : name === 'data-camera-retry' ? attrs.retry : false };
+      sheet.parts.get('.camera-dialog').fire('click', { target: { closest: () => button } });
+    },
     show: () => view.show(root),
     tile: (id, box = sheet || root.parts.get('.hc-rooms')) => box.querySelector('[data-dev="' + id + '"]'),
     device: id => data.devices.find(d => d.id === id),
@@ -136,7 +156,7 @@ test('Home renders live light buttons and explicit unavailable states', () => {
   assert.match(rooms.html, />Off</);
   assert.match(rooms.html, />Unavailable</);
   assert.match(rooms.html, /Unassigned/);
-  assert.match(rooms.html, /No lights/);
+  assert.doesNotMatch(rooms.html, /No lights|>Empty</);
   assert.match(rooms.html, /&lt;img/);
   assert.doesNotMatch(rooms.html, /data-dev=|tile-fill|<img/);
   assert.doesNotMatch(f.root.html, /hc-scenes/);
@@ -221,4 +241,132 @@ test('Home renders one climate control per device and escapes names', () => {
   assert.match(html, /&lt;img/);
   assert.match(html, /—/);
   assert.doesNotMatch(html, /data-temp|data-tmode|Set to|humidity|<img/);
+});
+
+test('favorites share live readings and controls, including pending and unavailable states', () => {
+  const f = fixture(), favorites = f.root.parts.get('.hc-favorites');
+  assert.equal((favorites.html.match(/<button[^>]*class="climate-card[^>]* disabled/g) || []).length, 3);
+  f.App.climate.devices = [
+    { id: 'climate.joseph', name: 'Joseph Bedroom', temperature: 71, mode: 'off', activity: 'off' },
+    { id: 'climate.hall', name: 'Hallway', temperature: 74, mode: 'cool', activity: 'cooling', target: 73 },
+    { id: 'climate.amelie', name: 'Amelie Bedroom', temperature: 72, mode: 'heat', activity: 'idle', target: 70 }
+  ];
+  f.App.emit('climate');
+  assert.deepEqual([...favorites.html.matchAll(/data-climate="([^"]+)"/g)].map(m => m[1]),
+    ['climate.amelie', 'climate.joseph', 'climate.hall']);
+  assert.match(favorites.html, /is-cooling/);
+  assert.match(favorites.html, /74°/);
+  f.click('[data-climate]', { climate: 'climate.joseph' });
+  assert.equal(f.toasts[0].climate, 'climate.joseph');
+  f.App.homeControls.pending['climate.hall'] = true;
+  f.App.emit('climate');
+  assert.match(favorites.html, /data-climate="climate.hall"[^>]*aria-busy="true" disabled/);
+  assert.match(favorites.html, /Updating…/);
+  delete f.App.homeControls.pending['climate.hall'];
+  f.App.climate.details = d => climateDetails(d, true);
+  f.App.climate.temperature = d => climateTemperature(d, true);
+  f.App.homeControls.canClimate = () => false;
+  f.App.emit('climate');
+  assert.equal((favorites.html.match(/<button[^>]*class="climate-card[^>]* disabled/g) || []).length, 3);
+  assert.doesNotMatch(favorites.html, /is-cooling|is-heating|7[124]°/);
+  assert.match(favorites.html, /Unavailable/);
+});
+
+
+test('Cameras button opens named discovered tiles without starting streams or showing sample photos', () => {
+  const f = fixture();
+  assert.match(f.root.parts.get('.hc-favorites').html, /data-cameras.*Cameras/);
+  f.App.cameras.devices = [{ id: 'camera.porch', name: '<Porch>', available: true }, { id: 'camera.offline', name: 'Offline', available: false }];
+  f.click('[data-cameras]', {});
+  const gallery = f.sheet.parts.get('.camera-dialog');
+  assert.match(gallery.html, /&lt;Porch&gt;/);
+  assert.match(gallery.html, /data-camera="camera.offline" disabled/);
+  assert.doesNotMatch(gallery.html, /<img|<video|LIVE/);
+  assert.equal(f.players.length, 0);
+  f.cameraClick({ camera: 'camera.offline' });
+  assert.equal(f.players.length, 0);
+  f.cameraClick({ camera: 'camera.porch' });
+  assert.equal(f.players[0].id, 'camera.porch');
+  assert.match(gallery.html, /<video/);
+  f.cameraClick({ back: true });
+  assert.equal(f.players[0].stopped, true);
+  assert.doesNotMatch(gallery.html, /<video/);
+});
+
+test('camera streams close on sheet dismissal, tab switch and hidden document', () => {
+  for (const close of [f => f.sheet.close(), f => f.hide(), f => f.hidden()]) {
+    const f = fixture();
+    f.App.cameras.devices = [{ id: 'camera.porch', name: 'Porch', available: true }];
+    f.click('[data-cameras]', {}); f.cameraClick({ camera: 'camera.porch' });
+    close(f);
+    assert.equal(f.players[0].stopped, true);
+    assert.equal(f.sheet.closed, true);
+  }
+});
+
+test('Home doorbell shortcut opens the matching live player directly and Back returns to cameras', () => {
+  const f = fixture(), favorites = f.root.parts.get('.hc-favorites');
+  assert.match(favorites.html, /data-doorbell[^>]* disabled/);
+  f.App.cameras.devices = [
+    { id: 'camera.doorbell', name: 'Driveway', available: true },
+    { id: 'camera.synthetic_entry', name: 'Doorbell Camera', available: true }
+  ];
+  f.App.emit('cameras');
+  assert.match(favorites.html, /data-doorbell/);
+  assert.doesNotMatch(favorites.html, /data-doorbell[^>]* disabled/);
+  f.click('[data-doorbell]', {});
+  const content = f.sheet.parts.get('.camera-dialog');
+  assert.deepEqual(f.players.map(player => player.id), ['camera.synthetic_entry']);
+  assert.match(content.html, /<video/);
+  assert.match(content.html, /Doorbell Camera/);
+  assert.doesNotMatch(content.html, /camera-grid|Select a camera/);
+  f.cameraClick({ back: true });
+  assert.equal(f.players[0].stopped, true);
+  assert.match(content.html, /camera-grid/);
+  assert.doesNotMatch(content.html, /<video/);
+});
+
+test('missing, ambiguous, unavailable or stale doorbells cannot start an arbitrary stream', () => {
+  const doorbell = { id: 'camera.synthetic_entry', name: 'Doorbell', available: true };
+  for (const scenario of [
+    { devices: [{ id: 'camera.doorbell', name: 'Porch', available: true }] },
+    { devices: [doorbell, { id: 'camera.synthetic_other', name: 'Doorbell Camera', available: true }] },
+    { devices: [{ ...doorbell, available: false }] },
+    { devices: [doorbell], stale: true }
+  ]) {
+    const f = fixture();
+    Object.assign(f.App.cameras, scenario);
+    f.App.emit('cameras');
+    assert.match(f.root.parts.get('.hc-favorites').html, /data-doorbell[^>]* disabled/);
+    f.click('[data-doorbell]', {});
+    f.App.openDoorbell();
+    assert.equal(f.players.length, 0);
+    assert.equal(f.sheet, undefined);
+  }
+});
+
+test('direct doorbell player closes through dismissal, tab switch, visibility and shared close API', () => {
+  for (const close of [f => f.sheet.close(), f => f.hide(), f => f.hidden(), f => f.App.closeCameras()]) {
+    const f = fixture();
+    f.App.cameras.devices = [{ id: 'camera.synthetic_entry', name: 'Doorbell', available: true }];
+    f.App.openDoorbell();
+    assert.equal(f.players[0].id, 'camera.synthetic_entry');
+    close(f);
+    assert.equal(f.players[0].stopped, true);
+    assert.equal(f.sheet.closed, true);
+    assert.doesNotThrow(() => f.App.closeCameras());
+  }
+});
+
+test('prebuilding the Home controls cannot close a doorbell player opened by the dashboard', () => {
+  const f = fixture();
+  f.App.current = 'home';
+  f.App.cameras.devices = [{ id: 'camera.synthetic_entry', name: 'Doorbell', available: true }];
+  f.App.openDoorbell();
+  f.hide();
+  assert.equal(f.players[0].stopped, undefined);
+  assert.equal(f.sheet.closed, undefined);
+  f.App.closeCameras('home');
+  assert.equal(f.players[0].stopped, true);
+  assert.equal(f.sheet.closed, true);
 });

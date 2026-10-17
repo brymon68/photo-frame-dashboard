@@ -76,13 +76,15 @@ import java.util.Map;
 public class WebResourceResponse {
   public final String type, encoding, reason;
   public final int status;
-  public final Map<String, String> headers;
+  public Map<String, String> headers;
   public final InputStream body;
   public WebResourceResponse(String type, String encoding, int status, String reason,
       Map<String, String> headers, InputStream body) {
     this.type = type; this.encoding = encoding; this.status = status;
     this.reason = reason; this.headers = headers; this.body = body;
   }
+  public Map<String, String> getResponseHeaders() { return headers; }
+  public void setResponseHeaders(Map<String, String> headers) { this.headers = headers; }
 }
 ''',
     'org/json/JSONException.java': '''
@@ -102,21 +104,31 @@ public class JSONObject {
     value.add(key, content instanceof JSONObject || content instanceof JSONArray ? JsonParser.parseString(content.toString()) : new Gson().toJsonTree(content)); return this;
   }
   public String toString() { return value.toString(); }
+  public static String quote(String value) { return new Gson().toJson(value); }
   public JSONObject(String text) throws JSONException {
     try { value = JsonParser.parseString(text).getAsJsonObject(); }
     catch (RuntimeException e) { throw new JSONException("Invalid JSON"); }
   }
   public JSONObject(JsonObject value) { this.value = value; }
-  private JsonElement get(String key) throws JSONException {
+  private JsonElement element(String key) throws JSONException {
     if (isNull(key)) throw new JSONException("Missing value");
     return value.get(key);
   }
+  public Object get(String key) throws JSONException {
+    JsonElement found = element(key);
+    if (found.isJsonObject()) return new JSONObject(found.getAsJsonObject());
+    if (found.isJsonArray()) return new JSONArray(found.getAsJsonArray());
+    JsonPrimitive primitive = found.getAsJsonPrimitive();
+    if (primitive.isNumber()) return primitive.getAsNumber();
+    if (primitive.isBoolean()) return primitive.getAsBoolean();
+    return primitive.getAsString();
+  }
   public boolean isNull(String key) { return !value.has(key) || value.get(key).isJsonNull(); }
-  public JSONObject getJSONObject(String key) throws JSONException { return new JSONObject(get(key).getAsJsonObject()); }
-  public JSONArray getJSONArray(String key) throws JSONException { return new JSONArray(get(key).getAsJsonArray()); }
-  public String getString(String key) throws JSONException { return get(key).getAsString(); }
-  public double getDouble(String key) throws JSONException { return get(key).getAsDouble(); }
-  public int getInt(String key) throws JSONException { return get(key).getAsInt(); }
+  public JSONObject getJSONObject(String key) throws JSONException { return new JSONObject(element(key).getAsJsonObject()); }
+  public JSONArray getJSONArray(String key) throws JSONException { return new JSONArray(element(key).getAsJsonArray()); }
+  public String getString(String key) throws JSONException { return element(key).getAsString(); }
+  public double getDouble(String key) throws JSONException { return element(key).getAsDouble(); }
+  public int getInt(String key) throws JSONException { return element(key).getAsInt(); }
   public java.util.Iterator<String> keys() { return value.keySet().iterator(); }
 }
 ''',
@@ -161,17 +173,22 @@ def main():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
             sources.append(path)
-        sources += [args.source_dir / name for name in ('CalendarFeed.java', 'WeatherFeed.java', 'ClimateFeed.java', 'LightsFeed.java', 'HomeAssistantControl.java')]
+        sources += [args.source_dir / name for name in ('CalendarFeed.java', 'WeatherFeed.java', 'ClimateFeed.java', 'LightsFeed.java', 'HomeAssistantControl.java', 'CamerasFeed.java', 'CameraStream.java')]
         helper = args.source_dir / 'CachedFeed.java'
         if helper.exists():
             sources.append(helper)
         sources.append(Path(__file__).with_name('FeedTest.java'))
         sources.append(Path(__file__).with_name('ControlTest.java'))
+        sources.append(Path(__file__).with_name('CameraTest.java'))
         javac = args.java_home / 'bin/javac' if args.java_home else 'javac'
         java = args.java_home / 'bin/java' if args.java_home else 'java'
-        subprocess.run([str(javac), '--release', '8', '-cp', str(args.gson_jar), '-d', str(root), *map(str, sources)], check=True)
-        subprocess.run([str(java), '-cp', os.pathsep.join((str(root), str(args.gson_jar))), 'com.brymon68.homehq.FeedTest', str(root)], check=True)
-        subprocess.run([str(java), '-cp', os.pathsep.join((str(root), str(args.gson_jar))), 'com.brymon68.homehq.ControlTest', str(root)], check=True)
+        library_dir = Path(__file__).resolve().parents[1] / 'lib'
+        libraries = [args.gson_jar, *(library_dir / name for name in (
+            'Java-WebSocket-1.6.0.jar', 'slf4j-api-2.0.13.jar', 'slf4j-nop-2.0.13.jar'))]
+        classpath = os.pathsep.join(map(str, libraries))
+        subprocess.run([str(javac), '--release', '8', '-cp', classpath, '-d', str(root), *map(str, sources)], check=True)
+        for test in ('FeedTest', 'ControlTest', 'CameraTest'):
+            subprocess.run([str(java), '-cp', os.pathsep.join((str(root), classpath)), 'com.brymon68.homehq.' + test, str(root)], check=True)
 
 
 if __name__ == '__main__':

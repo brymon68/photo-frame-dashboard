@@ -45,13 +45,14 @@
   overflow: hidden; position: relative;
 }
 .h-hero-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.h-hero-title { font-size: 72px; line-height: .95; margin: 8px 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Leave room for serif descenders inside the horizontal ellipsis clip. */
+.h-hero-title { font-size: 72px; line-height: 1.1; flex-shrink: 0; padding-bottom: .1em; margin: 8px 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .h-hero-meta { font-size: 19px; opacity: .88; }
 .h-hero-foot { margin-top: auto; display: flex; align-items: center; gap: 14px; }
 .h-hero-foot .dots i { box-shadow: 0 0 0 3px var(--c); }
 .h-hero-count { font-size: 150px; line-height: .78; letter-spacing: -.04em; text-align: right; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; }
 .h-hero-count small { font-size: 22px; letter-spacing: .1em; text-transform: uppercase; font-stretch: 80%; margin-top: 10px; }
-.h-hero--empty { background: var(--ink); color: var(--paper); flex-direction: column; justify-content: center; }
+.h-hero--empty { background: var(--ink); color: var(--paper); flex-direction: column; justify-content: center; gap: 0; }
 .h-hero--empty .h-hero-title { white-space: normal; font-size: 56px; }
 
 .h-lanes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; min-height: 0; }
@@ -73,7 +74,15 @@
 
 /* ---- side column */
 .h-side { grid-column: 8 / 13; display: grid; grid-template-rows: 1fr 1fr; gap: 16px; min-height: 0; }
-.h-shop, .h-status { justify-content: center; display: flex; flex-direction: column; gap: 4px; }
+.h-shop.card, .h-status { justify-content: center; display: flex; flex-direction: column; gap: 4px; }
+.h-status-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.h-status-title { align-self: stretch; flex: 1; }
+.h-status-readings { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.h-doorbell { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 14px; border: 2px solid var(--ink); border-radius: 12px; font-size: 18px; font-weight: 700; }
+.h-doorbell:not(:disabled):active { background: var(--ink); color: var(--paper); }
+.h-status button:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.h-doorbell:disabled { opacity: .6; cursor: default; }
+.h-doorbell:disabled:active { transform: none; }
 .h-stat { display: flex; align-items: baseline; gap: 8px; }
 .h-stat .num { font-size: 56px; line-height: .9; }
 .h-stat small { font-size: 16px; color: var(--mute); }
@@ -82,5 +91,9 @@
 .h-st-row { display: flex; align-items: center; gap: 8px; font-size: 17px; min-height: 30px; }
 .h-st-row b { font-size: 24px; }
 .h-st-row span { color: var(--ink-2); }
+.h-st-temp .num { margin-left: auto; }
+.h-st-temp svg { flex-shrink: 0; }
+.h-st-temp--bedroom { font-size: 21px; min-height: 38px; }
+.h-st-temp--bedroom .num { font-size: 32px; }
 .h-st-row.is-warn { color: #B45F00; font-weight: 800; }
 .h-st-row.is-warn span { color: inherit; }

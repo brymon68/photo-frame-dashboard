@@ -4,6 +4,7 @@ const App = window.App;
 const native = location.origin === 'https://appassets.androidplatform.net';
 const controls = App.homeControls = { pending: Object.create(null) };
 controls.canLight = light => native && light && App.lights.status(light) !== 'Unavailable';
+controls.canDim = light => controls.canLight(light) && light.dimmable && Number.isInteger(light.level);
 controls.canClimate = device => native && device && App.climate.details(device).status !== 'Unavailable'
   && (device.modes.length > 0 || climateTargets(device).length > 0);
 
@@ -52,6 +53,15 @@ controls.toggleLight = function (id) {
   if (!controls.canLight(light) || controls.pending[id]) return;
   const on = light.state !== 'on';
   return controls.send('lights', id, { action: on ? 'turn_on' : 'turn_off' }, current => current.state === (on ? 'on' : 'off'));
+};
+
+controls.setBrightness = function (id, level) {
+  const light = App.lights.lights.find(item => item.id === id);
+  if (!controls.canDim(light) || controls.pending[id] || !Number.isInteger(level) || level < 0 || level > 100) return;
+  if (level === light.level) return;
+  const command = level === 0 ? { action: 'turn_off' } : { action: 'turn_on', brightness: level };
+  return controls.send('lights', id, command, current => level === 0 ? current.state === 'off'
+    : current.state === 'on' && current.level != null && Math.abs(current.level - level) <= 1);
 };
 
 controls.openClimate = function (id) {

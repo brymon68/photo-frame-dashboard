@@ -76,6 +76,19 @@ public class ControlTest {
     check(HomeAssistantControl.payload(mode, heat).getString("hvac_mode").equals("off"), "Supported mode");
     mode.put("mode", "auto"); rejects(mode, heat);
 
+    JSONObject dimmer = json("{\"entity_id\":\"light.bedroom\",\"state\":\"off\",\"attributes\":{\"supported_color_modes\":[\"brightness\"]}}");
+    JSONObject brightness = json("{\"entity\":\"light.bedroom\",\"action\":\"turn_on\",\"brightness\":50}");
+    check(HomeAssistantControl.payload(brightness, dimmer).getInt("brightness_pct") == 50, "Brightness percentage service payload");
+    for (double level : new double[] {-1, 0, 100.1, 101, 50.5}) {
+      brightness.put("brightness", level); rejects(brightness, dimmer);
+    }
+    brightness.put("brightness", 100);
+    check(HomeAssistantControl.payload(brightness, dimmer).getInt("brightness_pct") == 100, "Full brightness allowed");
+    brightness.put("action", "turn_off"); rejects(brightness, dimmer); brightness.put("action", "turn_on");
+    dimmer.put("state", "unavailable"); rejects(brightness, dimmer); dimmer.put("state", "on");
+    dimmer.put("attributes", json("{\"supported_color_modes\":[\"onoff\"]}")); rejects(brightness, dimmer);
+    dimmer.put("entity_id", "switch.room_lights"); brightness.put("entity", "switch.room_lights"); rejects(brightness, dimmer);
+
     URL.setURLStreamHandlerFactory(protocol -> protocol.equals("http") ? new URLStreamHandler() {
       protected URLConnection openConnection(URL url) { return new Fake(url); }
     } : null);
@@ -96,12 +109,15 @@ public class ControlTest {
     check(json(posted).getString("entity_id").equals("switch.room_lights"), "Explicit entity target");
     check(last.getRequestProperty("Authorization").equals("Bearer test-token"), "Native authentication");
     check(!last.getInstanceFollowRedirects() && !last.getUseCaches(), "No redirects or cache");
+    state = "{\"entity_id\":\"light.bedroom\",\"state\":\"off\",\"attributes\":{\"supported_color_modes\":[\"brightness\"]}}";
+    check(control.request(request("POST", origin, "{\"entity\":\"light.bedroom\",\"action\":\"turn_on\",\"brightness\":37}")).status == 200, "Brightness request accepted");
+    check(address.endsWith("/api/services/light/turn_on") && json(posted).getInt("brightness_pct") == 37, "Brightness uses real light service");
     state = "{\"entity_id\":\"switch.room_lights\",\"state\":\"unavailable\"}";
-    check(control.request(request("POST", origin, light)).status == 409 && posts == 1, "Unavailable device causes no write");
+    check(control.request(request("POST", origin, light)).status == 409 && posts == 2, "Unavailable device causes no write");
     status = 401;
-    check(control.request(request("POST", origin, light)).status == 503 && posts == 1, "Failed authorization causes no write");
+    check(control.request(request("POST", origin, light)).status == 503 && posts == 2, "Failed authorization causes no write");
     status = 302;
-    check(control.request(request("POST", origin, light)).status == 503 && posts == 1, "Redirect causes no write");
+    check(control.request(request("POST", origin, light)).status == 503 && posts == 2, "Redirect causes no write");
     System.out.println("Native control checks passed: " + checks);
   }
 }

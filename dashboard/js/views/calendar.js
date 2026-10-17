@@ -1,10 +1,18 @@
-// Calendar: Today-by-person lanes (default), 3-day, rolling week, month.
+// Calendar: Today-by-person lanes (default), work week, rolling week, month.
 (function () {
   'use strict';
   var D = window.DATA;
   var PX = 72, START = 6, END = 23; // 72px per hour, 6 AM → 11 PM
   var V = { mode: 'day', date: null, el: null, scroll: null };
-  var MODES = [['day', 'Today'], ['3day', '3 Day'], ['week', 'Week'], ['month', 'Month']];
+  var MODES = [['day', 'Today'], ['workweek', 'Work Week'], ['week', 'Week'], ['month', 'Month']];
+
+  function workweekStart(date) { return App.addDays(App.dayStart(date), -((date.getDay() + 6) % 7)); }
+
+  function unavailableOn(date) {
+    return App.calendar && App.calendar.readOnly && D.people.some(function (source) {
+      return source.kind === 'availability' && !App.calendar.available(source.id, date);
+    });
+  }
 
   function y(d) { return ((d.getHours() + d.getMinutes() / 60) - START) * PX; }
   function clampTop(e, day) {
@@ -47,12 +55,12 @@
     var now = App.now();
     var p = App.evColor(e), family = App.isFamily(e);
     var mins = (e.end - e.start) / 60000;
-    var cls = 'ev' + (e.end <= now ? ' is-past' : '') + (e.start <= now && e.end > now ? ' is-now' : '') + (mins < 45 ? ' is-short' : '') + (family ? ' is-family' : '') + (opts.half ? ' is-half' : '');
-    var others = family ? D.ALL : opts.lane ? e.people.filter(function (id) { return id !== opts.lane; }) : (e.people.length > 1 ? e.people : []);
+    var cls = 'ev' + (e.end <= now ? ' is-past' : '') + (e.start <= now && e.end > now ? ' is-now' : '') + (mins < 45 ? ' is-short' : '') + (family && !e.calendarId ? ' is-family' : '') + (opts.half ? ' is-half' : '');
+    var others = e.calendarId ? [] : family ? D.ALL : opts.lane ? e.people.filter(function (id) { return id !== opts.lane; }) : (e.people.length > 1 ? e.people : []);
     var travel = e.travel ? '<span class="ev-travel" style="height:' + (e.travel * PX / 60) + 'px"></span>' : '';
     return '<button class="' + cls + '" data-ev="' + e.id + '" style="' + App.pstyle(p) + ';' + style + '">' + travel +
       '<span class="ev-title">' + App.esc(e.title) + '</span>' +
-      '<span class="ev-meta">' + App.fmt.range(e.start, e.end) + (e.travel ? ' · <b>' + App.icon('car', 16) + 'Leave ' + App.fmt.time(App.leaveBy(e), false) + '</b>' : '') + '</span>' +
+      '<span class="ev-meta">' + (e.calendarId && !opts.lane ? App.esc(App.person(e.calendarId).name) + ' · ' : '') + App.fmt.range(e.start, e.end) + (e.travel ? ' · <b>' + App.icon('car', 16) + 'Leave ' + App.fmt.time(App.leaveBy(e), false) + '</b>' : '') + '</span>' +
       (others.length ? '<span class="ev-with">' + App.dots(others, 14) + '</span>' : '') +
       '</button>';
   }
@@ -85,10 +93,11 @@
   // ------------------------------------------------------------ Today (lanes per person)
   function dayView() {
     var day = V.date;
-    var timed = App.timedOn(day), fam = timed.filter(App.isFamily);
+    var connected = App.calendar && App.calendar.readOnly;
+    var timed = App.timedOn(day), fam = connected ? [] : timed.filter(App.isFamily);
     var allDay = App.allDayOn(day);
     var ad = allDay.length ? '<div class="allday"><div class="gutter label">All day</div><div class="allday-grid">' + allDay.map(function (e) {
-      var fam2 = App.isFamily(e);
+      var fam2 = !connected && App.isFamily(e);
       var idx = D.people.map(function (p) { return p.id; }).indexOf(e.people[0]);
       var col = fam2 ? '1 / -1' : (idx + 1) + ' / span 1';
       var s = App.dayStart(day), spanDays = Math.round((e.end - e.start) / 864e5), dayN = Math.round((s - e.start) / 864e5) + 1;
@@ -98,49 +107,52 @@
     var grid = '<div class="grid-scroll"><div class="grid" style="height:' + (END - START) * PX + 'px">' +
       '<div class="hours">' + hoursCol() + '</div>' +
       '<div class="lanes">' + D.people.map(function (p) {
-        var list = App.timedOn(day, p.id).filter(function (e) { return !App.isFamily(e); });
+        var list = App.timedOn(day, p.id).filter(function (e) { return connected || !App.isFamily(e); });
         return '<div class="lane" style="' + App.pstyle(p) + '">' + placeBlocks(list, day, p.id) + '</div>';
       }).join('') +
-      '<div class="lane-fam">' + (App.calendar && App.calendar.readOnly ? placeBlocks(fam, day) : fam.map(function (e) {
+      '<div class="lane-fam">' + fam.map(function (e) {
         var b = clampTop(e, day);
         return evBlock(e, 'top:' + b.top + 'px;height:' + b.h + 'px;left:2px;right:2px');
-      }).join('')) + '</div>' +
+      }).join('') + '</div>' +
       nowLine([day]) + '</div>' +
       '</div></div>';
     var pending = App.calendar && App.calendar.readOnly && !App.calendar.updated;
     var empty = !timed.length && !allDay.length ? '<div class="cal-empty serif">' +
-      (pending ? (App.calendar.error ? 'Calendar unavailable.<br><i>Trying again soon.</i>' : 'Loading your calendar…') : 'Nothing on the calendar.<br><i>A rare, quiet day.</i>') + '</div>' : '';
-    var head = App.calendar && App.calendar.readOnly ? '<div class="lanes-head"><div class="gutter"></div><div class="lane-head" style="' + App.pstyle(D.family) + '">' + App.avatar(D.family, 30) + '<b>Family</b></div></div>' : '';
+      (pending ? (App.calendar.error ? 'Calendar unavailable.<br><i>Trying again soon.</i>' : 'Loading your calendar…') : unavailableOn(day) ? 'Some calendar times unavailable.<br><i>Trying again soon.</i>' : 'Nothing on the calendar.<br><i>A rare, quiet day.</i>') + '</div>' : '';
+    var head = connected ? '<div class="lanes-head"><div class="gutter"></div>' + D.people.map(function (source) {
+      return '<div class="lane-head" style="' + App.pstyle(source) + '">' + App.avatar(source, 30) + '<b>' + App.esc(source.name) + '</b></div>';
+    }).join('') + '</div>' : '';
     return '<div class="cal-day">' + head + ad + grid + empty + '</div>';
   }
 
-  // ------------------------------------------------------------ 3 day
-  function threeDay() {
-    var days = [0, 1, 2].map(function (i) { return App.addDays(V.date, i); });
+  // ------------------------------------------------------------ work week
+  function workweek() {
+    var days = [0, 1, 2, 3, 4].map(function (offset) { return App.addDays(V.date, offset); });
     var now = App.now();
     var anyAllDay = days.some(function (d) { return App.allDayOn(d).length; });
     var head = '<div class="lanes-head"><div class="gutter"></div>' + days.map(function (d) {
       var today = App.sameDay(d, now);
-      return '<div class="day-head' + (today ? ' is-today' : '') + '"><span class="num">' + d.getDate() + '</span><b>' + App.fmt.rel(d) + '</b><small>' + App.fmt.monthShort(d) + '</small></div>';
+      return '<div class="day-head' + (today ? ' is-today' : '') + '"><span class="num">' + d.getDate() + '</span><b>' + App.fmt.dayShort(d) + '</b><small>' + App.fmt.monthShort(d) + '</small></div>';
     }).join('') + '</div>';
     var ad = '';
     if (anyAllDay) {
-      var s0 = App.dayStart(days[0]), s3 = App.addDays(s0, 3);
-      var list = App.events().filter(function (e) { return e.allDay && e.start < s3 && e.end > s0; });
-      ad = '<div class="allday"><div class="gutter label">All day</div><div class="allday-grid allday-grid--3">' + list.map(function (e) {
-        var a = Math.max(0, Math.round((e.start - s0) / 864e5)), b = Math.min(3, Math.round((e.end - s0) / 864e5));
-        return '<button class="ad' + (e.start < s0 ? ' ad--cont' : '') + '" data-ev="' + e.id + '" style="grid-column:' + (a + 1) + ' / ' + (b + 1) + ';' + App.pstyle(App.evColor(e)) + '">' +
-          (e.start < s0 ? App.icon('left', 16) : '') + App.esc(e.title) + (e.end > s3 ? App.icon('right', 16) : '') + '</button>';
+      var firstDay = days[0], afterWeek = App.addDays(firstDay, 5);
+      var list = App.events().filter(function (event) { return event.allDay && event.start < afterWeek && event.end > firstDay; });
+      ad = '<div class="allday"><div class="gutter label">All day</div><div class="allday-grid allday-grid--workweek">' + list.map(function (event) {
+        var firstColumn = days.findIndex(function (day) { return event.start < App.addDays(day, 1); });
+        var afterColumn = days.filter(function (day) { return day < event.end; }).length;
+        return '<button class="ad' + (event.start < firstDay ? ' ad--cont' : '') + '" data-ev="' + event.id + '" style="grid-column:' + (firstColumn + 1) + ' / ' + (afterColumn + 1) + ';' + App.pstyle(App.evColor(event)) + '">' +
+          (event.start < firstDay ? App.icon('left', 16) : '') + (event.calendarId ? App.esc(App.person(event.calendarId).name) + ' · ' : '') + App.esc(event.title) + (event.end > afterWeek ? App.icon('right', 16) : '') + '</button>';
       }).join('') + '</div></div>';
     }
     var grid = '<div class="grid-scroll"><div class="grid" style="height:' + (END - START) * PX + 'px">' +
       '<div class="hours">' + hoursCol() + '</div>' +
-      '<div class="lanes lanes--3">' + days.map(function (d) {
+      '<div class="lanes lanes--workweek">' + days.map(function (d) {
         return '<div class="lane' + (App.sameDay(d, now) ? ' is-today' : '') + '">' + placeBlocks(App.timedOn(d), d) + '</div>';
       }).join('') + '</div>' +
       nowLine(days).replace('now-line', 'now-line now-line--' + days.findIndex(function (d) { return App.sameDay(d, now); })) +
       '</div></div>';
-    return '<div class="cal-day cal-3">' + head + ad + grid + '</div>';
+    return '<div class="cal-day cal-workweek">' + head + ad + grid + '</div>';
   }
 
   // ------------------------------------------------------------ rolling week
@@ -151,13 +163,13 @@
       var ad = App.allDayOn(d), list = App.timedOn(d), max = 7 - ad.length, more = list.length - max;
       return '<div class="wk-col' + (today ? ' is-today' : '') + '" data-day="' + (+d) + '">' +
         '<div class="wk-head"><b>' + App.fmt.dayShort(d) + '</b><span class="num">' + d.getDate() + '</span></div>' +
-        ad.map(function (e) { return '<button class="wk-ad" data-ev="' + e.id + '" style="' + App.pstyle(App.evColor(e)) + '">' + App.esc(e.title) + '</button>'; }).join('') +
+        ad.map(function (e) { return '<button class="wk-ad" data-ev="' + e.id + '" style="' + App.pstyle(App.evColor(e)) + '">' + (e.calendarId ? App.esc(App.person(e.calendarId).name) + ' · ' : '') + App.esc(e.title) + '</button>'; }).join('') +
         list.slice(0, max).map(function (e) {
           return '<button class="wk-ev' + (e.end <= now ? ' is-past' : '') + '" data-ev="' + e.id + '" style="' + App.pstyle(App.evColor(e)) + '">' +
-            '<span class="wk-t">' + App.fmt.time(e.start, false) + '</span><span class="wk-n">' + App.esc(e.title) + '</span></button>';
+            '<span class="wk-t">' + (e.calendarId ? App.esc(App.person(e.calendarId).name) + ' · ' : '') + App.fmt.time(e.start, false) + '</span><span class="wk-n">' + App.esc(e.title) + '</span></button>';
         }).join('') +
         (more > 0 ? '<button class="wk-more" data-day="' + (+d) + '">+' + more + ' more</button>' : '') +
-        (!list.length && !ad.length ? '<div class="wk-free serif"><i>Free</i></div>' : '') +
+        (!list.length && !ad.length ? '<div class="wk-free serif"><i>' + (unavailableOn(d) ? 'Unavailable' : 'Free') + '</i></div>' : '') +
         '</div>';
     }).join('') + '</div>';
   }
@@ -183,13 +195,18 @@
   function title() {
     var d = V.date, now = App.now();
     if (V.mode === 'day') return { k: App.fmt.month(d) + ' ' + d.getFullYear() + (App.sameDay(d, now) ? ' · Today' : ' · ' + App.fmt.rel(d)), t: App.fmt.day(d) + ' <i>' + d.getDate() + '</i>' };
-    if (V.mode === '3day') { var e = App.addDays(d, 2); return { k: App.fmt.month(d) + ' ' + d.getFullYear(), t: App.fmt.dayShort(d) + ' ' + d.getDate() + ' <i>–</i> ' + App.fmt.dayShort(e) + ' ' + e.getDate() }; }
+    if (V.mode === 'workweek') {
+      var friday = App.addDays(d, 4);
+      var years = d.getFullYear() === friday.getFullYear() ? String(d.getFullYear()) : d.getFullYear() + '–' + friday.getFullYear();
+      return { k: years + ' · Mon–Fri', t: App.fmt.monthShort(d) + ' ' + d.getDate() + ' <i>–</i> ' +
+        (d.getMonth() === friday.getMonth() ? '' : App.fmt.monthShort(friday) + ' ') + friday.getDate() };
+    }
     if (V.mode === 'week') { var w = App.addDays(d, 6); return { k: 'Next 7 days', t: App.fmt.monthShort(d) + ' ' + d.getDate() + ' <i>–</i> ' + App.fmt.monthShort(w) + ' ' + w.getDate() }; }
     return { k: d.getFullYear(), t: App.fmt.month(d) };
   }
   function header() {
     var t = title();
-    var isToday = V.mode === 'month' ? (V.date.getMonth() === App.now().getMonth()) : App.sameDay(V.date, App.now());
+    var isToday = V.mode === 'month' ? (V.date.getMonth() === App.now().getMonth()) : App.sameDay(V.date, V.mode === 'workweek' ? workweekStart(App.now()) : App.now());
     return '<header class="cal-head">' +
       '<button class="icon-btn" data-nav="-1" aria-label="Previous">' + App.icon('left', 24) + '</button>' +
       '<div class="cal-title"><div class="serif">' + t.t + '</div><div class="label">' + t.k + '</div></div>' +
@@ -201,10 +218,20 @@
   }
 
   function render() {
-    if (App.calendar && App.calendar.readOnly) App.calendar.cover(V.date);
-    var body = { day: dayView, '3day': threeDay, week: weekView, month: monthView }[V.mode]();
-    var sync = App.calendar && App.calendar.readOnly ? '<div class="cal-sync" role="status">Family · Google Calendar · Read only · ' + App.esc(App.calendar.label()) + '</div>' : '';
-    V.el.innerHTML = '<div class="cal cal--' + V.mode + (App.calendar && App.calendar.readOnly ? ' cal--connected' : '') + '">' + header() + sync + '<div class="cal-body">' + body + '</div></div>';
+    if (App.calendar && App.calendar.readOnly) {
+      var visibleStart = V.date;
+      if (V.mode === 'month') {
+        visibleStart = new Date(V.date.getFullYear(), V.date.getMonth(), 1);
+        visibleStart = App.addDays(visibleStart, -((visibleStart.getDay() + 6) % 7));
+      }
+      App.calendar.cover(visibleStart, { day: 1, workweek: 5, week: 7, month: 42 }[V.mode]);
+    }
+    var body = { day: dayView, workweek: workweek, week: weekView, month: monthView }[V.mode]();
+    var connected = App.calendar && App.calendar.readOnly;
+    var sync = connected ? '<div class="cal-sync" role="status"><span class="cal-legend">' + D.people.map(function (source) {
+      return '<span style="' + App.pstyle(source) + '"><i></i>' + App.esc(source.name) + '</span>';
+    }).join('') + '</span><span>Google Calendar · Read only · ' + App.esc(App.calendar.label()) + '</span></div>' : '';
+    V.el.innerHTML = '<div class="cal cal--' + V.mode + (connected ? ' cal--connected' : '') + '" style="--calendar-columns:' + D.people.length + '">' + header() + sync + '<div class="cal-body">' + body + '</div></div>';
     var sc = V.el.querySelector('.grid-scroll');
     if (sc) {
       var now = App.now();
@@ -215,7 +242,7 @@
 
   function nav(dir) {
     if (V.mode === 'month') V.date = new Date(V.date.getFullYear(), V.date.getMonth() + dir, 1);
-    else V.date = App.addDays(V.date, dir * ({ day: 1, '3day': 3, week: 7 }[V.mode]));
+    else V.date = App.addDays(V.date, dir * ({ day: 1, workweek: 7, week: 7 }[V.mode]));
     V.scroll = null;
     render();
   }
@@ -225,10 +252,11 @@
     if ((t = e.target.closest('[data-ev]'))) return App.eventSheet(App.findEvent(t.dataset.ev));
     if ((t = e.target.closest('[data-more]'))) return moreSheet(t.dataset.more.split(','));
     if ((t = e.target.closest('[data-nav]'))) return nav(+t.dataset.nav);
-    if ((t = e.target.closest('[data-today]'))) { V.date = App.dayStart(App.now()); if (V.mode === 'month') V.date.setDate(1); V.scroll = null; return render(); }
+    if ((t = e.target.closest('[data-today]'))) { V.date = V.mode === 'workweek' ? workweekStart(App.now()) : App.dayStart(App.now()); if (V.mode === 'month') V.date.setDate(1); V.scroll = null; return render(); }
     if ((t = e.target.closest('[data-mode]'))) {
       V.mode = t.dataset.mode;
       if (V.mode === 'month') V.date = new Date(V.date.getFullYear(), V.date.getMonth(), 1);
+      if (V.mode === 'workweek') V.date = workweekStart(V.date);
       V.scroll = null;
       return render();
     }
@@ -254,14 +282,14 @@
     var p = App.evColor(e), fam = App.isFamily(e);
     App.sheet(
       '<div class="evs" style="' + App.pstyle(p) + '">' +
-      '<div class="evs-band"><div class="label label--on">' + App.fmt.rel(e.start) + ' · ' + App.fmt.month(e.start) + ' ' + e.start.getDate() + '</div>' +
+      '<div class="evs-band"><div class="label label--on">' + (e.calendarId ? App.esc(App.person(e.calendarId).name) + ' calendar · ' : '') + App.fmt.rel(e.start) + ' · ' + App.fmt.month(e.start) + ' ' + e.start.getDate() + '</div>' +
       '<h2 class="serif">' + App.esc(e.title) + '</h2>' +
       '<div class="evs-time num">' + (e.allDay ? 'All day' : App.fmt.range(e.start, e.end)) + '</div></div>' +
       '<div class="evs-body">' +
       (e.travel ? '<div class="evs-row evs-leave">' + App.icon('car', 28) + '<div><b>Leave by ' + App.fmt.time(App.leaveBy(e)) + '</b><span>' + e.travel + ' min drive in current traffic</span></div></div>' : '') +
       (e.loc ? '<div class="evs-row">' + App.icon('pin', 28) + '<div><b>' + App.esc(e.loc) + '</b>' + (e.source === 'google' ? '' : '<span>Tap to send directions to phone</span>') + '</div></div>' : '') +
-      '<div class="evs-row">' + App.icon('person', 28) + '<div class="evs-people">' + (fam ? D.people : e.people.map(App.person)).map(function (x) {
-        return '<span class="chip" style="' + App.pstyle(x) + '">' + App.avatar(x, 32) + x.name + '</span>';
+      '<div class="evs-row">' + App.icon(e.calendarId ? 'calendar' : 'person', 28) + '<div class="evs-people">' + (e.calendarId ? [App.person(e.calendarId)] : fam ? D.people : e.people.map(App.person)).map(function (x) {
+        return '<span class="chip" style="' + App.pstyle(x) + '">' + App.avatar(x, 32) + App.esc(x.name) + '</span>';
       }).join('') + '</div></div>' +
       (e.notes ? '<div class="evs-notes serif">“' + App.esc(e.notes) + '”</div>' : '') +
       '</div></div>', { cls: 'sheet--event' });
@@ -271,7 +299,7 @@
     var list = ids.map(App.findEvent).filter(Boolean);
     App.sheet('<div class="sheet-pad"><div class="label">Overlapping</div><h2 class="serif sheet-h">' + list.length + ' more events</h2>' +
       '<div class="more-list">' + list.map(function (e) {
-        return '<button class="more-row" data-ev="' + e.id + '" style="' + App.pstyle(App.evColor(e)) + '"><i></i><b>' + App.esc(e.title) + '</b><span>' + App.fmt.range(e.start, e.end) + '</span></button>';
+        return '<button class="more-row" data-ev="' + e.id + '" style="' + App.pstyle(App.evColor(e)) + '"><i></i><b>' + App.esc(e.title) + '</b><span>' + (e.calendarId ? App.esc(App.person(e.calendarId).name) + ' · ' : '') + App.fmt.range(e.start, e.end) + '</span></button>';
       }).join('') + '</div></div>', {
       onMount: function (s) { s.addEventListener('click', function (ev) { var t = ev.target.closest('[data-ev]'); if (t) App.eventSheet(App.findEvent(t.dataset.ev)); }); }
     });
@@ -357,9 +385,10 @@
   });
   App.on('minute', function () {
     if (App.current !== 'calendar') return;
+    if (App.calendar && App.calendar.readOnly && D.people.some(function (source) { return source.kind === 'availability'; })) return render();
     var line = V.el.querySelector('.now-line');
     var now = App.now();
     if (line) { line.style.top = y(now) + 'px'; line.querySelector('span').textContent = App.fmt.time(now, false); }
   });
-  App.on('time', function () { V.date = App.dayStart(App.now()); V.scroll = null; });
+  App.on('time', function () { V.date = V.mode === 'workweek' ? workweekStart(App.now()) : App.dayStart(App.now()); V.scroll = null; });
 })();

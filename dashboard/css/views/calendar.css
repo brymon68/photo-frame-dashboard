@@ -8,14 +8,18 @@
 .cal-head .seg button { min-height: 46px; padding: 0 18px; font-size: 15px; }
 .cal-title { display: flex; align-items: baseline; gap: 12px; min-width: 300px; padding: 0 6px; }
 .cal-title .serif { font-size: 34px; line-height: 1; white-space: nowrap; }
+.cal--workweek .cal-title { flex-direction: column; align-items: flex-start; gap: 2px; }
 .cal-head [data-today] { margin-right: auto; }
 .cal-body { flex: 1; min-height: 0; position: relative; }
-.cal-sync { flex: none; color: var(--mute); font-size: 12px; margin: 0 6px 8px; }
+.cal-sync { flex: none; display: flex; align-items: center; gap: 18px; color: var(--mute); font-size: 12px; margin: 0 6px 8px; }
+.cal-legend { display: flex; gap: 12px; color: var(--ink); font-weight: 700; }
+.cal-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.cal-legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
 
-/* ---- time grid (Today + 3 day) */
+/* ---- time grid (Today + work week) */
 .cal-day { height: 100%; display: flex; flex-direction: column; position: relative; }
 .lanes-head { display: grid; grid-template-columns: 64px repeat(4, 1fr); flex: none; }
-.cal-3 .lanes-head { grid-template-columns: 64px repeat(3, 1fr); }
+.cal-workweek .lanes-head { grid-template-columns: 64px repeat(5, 1fr); }
 .lane-head { display: flex; align-items: center; gap: 10px; padding: 0 12px 10px; border-bottom: 5px solid var(--c); margin: 0 4px; }
 .lane-head b { font-size: 22px; font-weight: 800; font-stretch: 80%; text-transform: uppercase; letter-spacing: .04em; }
 .day-head { display: flex; align-items: baseline; gap: 10px; padding: 0 14px 6px; margin: 0 4px; border-bottom: 5px solid var(--ink); }
@@ -27,7 +31,7 @@
 .allday { display: grid; grid-template-columns: 64px 1fr; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); flex: none; }
 .allday .gutter { font-size: 12px; padding-right: 6px; line-height: 1.1; }
 .allday-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 8px; padding: 0 4px; }
-.allday-grid--3 { grid-template-columns: repeat(3, 1fr); }
+.allday-grid--workweek { grid-template-columns: repeat(5, 1fr); }
 .ad {
   min-height: 44px; padding: 0 14px; border-radius: 10px;
   display: flex; align-items: center; gap: 6px;
@@ -46,14 +50,14 @@
   font-size: var(--fs-min); font-weight: 700; font-stretch: 80%; color: var(--mute); white-space: nowrap;
 }
 .lanes { position: absolute; left: 64px; right: 0; top: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
-.lanes--3 { grid-template-columns: repeat(3, 1fr); }
+.lanes--workweek { grid-template-columns: repeat(5, 1fr); }
 .lane { position: relative; border-left: 1px solid var(--line); }
 .lane.is-today { background: rgba(17, 17, 17, .03); }
 .lane-fam { position: absolute; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none; }
 .lane-fam .ev { pointer-events: auto; }
-.cal--connected .cal-day .lanes,
-.cal--connected .cal-day .allday-grid { grid-template-columns: 1fr; }
-.cal--connected .cal-day .lanes-head { grid-template-columns: 64px 1fr; }
+.cal--connected.cal--day .lanes,
+.cal--connected.cal--day .allday-grid { grid-template-columns: repeat(var(--calendar-columns), 1fr); }
+.cal--connected.cal--day .lanes-head { grid-template-columns: 64px repeat(var(--calendar-columns), 1fr); }
 
 /* event block */
 .ev {
@@ -99,10 +103,12 @@
   background: var(--alert); color: #fff; border-radius: 8px; padding: 3px 7px;
   font-size: 17px; line-height: 1.2;
 }
-.now-line--0 { right: calc((100% - 64px) * 2 / 3); }
-.now-line--1 { left: calc(64px + (100% - 64px) / 3); right: calc((100% - 64px) / 3); }
-.now-line--2 { left: calc(64px + (100% - 64px) * 2 / 3); }
-.now-line--1 span, .now-line--2 span { display: none; }
+.cal-workweek .now-line--0 { right: calc((100% - 64px) * 4 / 5); }
+.cal-workweek .now-line--1 { left: calc(64px + (100% - 64px) / 5); right: calc((100% - 64px) * 3 / 5); }
+.cal-workweek .now-line--2 { left: calc(64px + (100% - 64px) * 2 / 5); right: calc((100% - 64px) * 2 / 5); }
+.cal-workweek .now-line--3 { left: calc(64px + (100% - 64px) * 3 / 5); right: calc((100% - 64px) / 5); }
+.cal-workweek .now-line--4 { left: calc(64px + (100% - 64px) * 4 / 5); }
+.cal-workweek .now-line:not(.now-line--0) span { display: none; }
 .cal-empty {
   position: absolute; left: 64px; right: 0; top: 45%; text-align: center;
   font-size: 48px; line-height: 1.05; color: var(--mute); pointer-events: none;
